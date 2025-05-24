@@ -4,8 +4,9 @@ Centralized database setup: engine, SessionLocal, Base, and table creation.
 """
 import logging
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base, Session # <<< CORRECT IMPORT
+from sqlalchemy.orm import sessionmaker, declarative_base, Session # <<< THIS IMPORT IS CRUCIAL
 import streamlit as st
+from typing import Optional # Ensure Optional is imported if used in type hints
 
 try:
     from config import APP_TITLE, DATABASE_URL
@@ -19,8 +20,8 @@ logger = logging.getLogger(APP_TITLE)
 
 # --- Database Engine and Session Setup ---
 engine = None
-SessionLocal = None
-Base = None
+SessionLocal = None # type: ignore
+Base = None # type: ignore
 
 try:
     engine = create_engine(DATABASE_URL, echo=False)
@@ -72,3 +73,4 @@ def create_db_tables():
         logger.error("Database engine or Base not initialized. Cannot create tables.")
         if 'st' in globals() and hasattr(st, 'error'):
             st.error("Database connection components (engine/Base) failed to initialize. Database features will not work.")
+
