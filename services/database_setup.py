@@ -4,8 +4,8 @@ Centralized database setup: engine, SessionLocal, Base, and table creation.
 """
 import logging
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
-import streamlit as st # For st.cache_resource
+from sqlalchemy.orm import sessionmaker, declarative_base, Session # <<< ADDED Session IMPORT
+import streamlit as st 
 
 try:
     from config import APP_TITLE, DATABASE_URL
@@ -30,7 +30,7 @@ except Exception as e_db_core_setup:
 
 
 @st.cache_resource
-def get_db_session() -> Optional[Session]:
+def get_db_session() -> Optional[Session]: # <<< Session type hint is now valid
     """
     Provides a database session.
     For Streamlit, it's often recommended to create a new session per request/interaction
@@ -55,7 +55,7 @@ def create_db_tables():
     if Base and engine:
         try:
             # Import all models here to ensure they are registered with Base.metadata
-            from .auth_service import User  # pylint: disable=import-outside-toplevel
+            from .auth_service import User  # pylint: disable=import-outside-toplevel 
             from .data_service import TradeNoteDB # pylint: disable=import-outside-toplevel
             # Add imports for any other ORM models here
 
@@ -63,8 +63,6 @@ def create_db_tables():
             logger.info("Database tables checked/created successfully based on all known models.")
         except ImportError as e_model_import:
             logger.error(f"Failed to import one or more models for table creation: {e_model_import}. Some tables might not be created.", exc_info=True)
-            # Optionally, try to create tables with currently known metadata if partial creation is desired,
-            # but it's better to ensure all models are importable.
             try:
                 logger.warning("Attempting to create tables with currently known metadata due to model import error...")
                 Base.metadata.create_all(bind=engine)
@@ -73,10 +71,9 @@ def create_db_tables():
 
         except Exception as e_create_all:
             logger.error(f"Error creating database tables via Base.metadata.create_all: {e_create_all}", exc_info=True)
-            if 'st' in globals() and hasattr(st, 'error'): # Check if in Streamlit context
+            if 'st' in globals() and hasattr(st, 'error'): 
                 st.error(f"Database Error: Could not create tables. Check logs. Error: {e_create_all}")
     else:
         logger.error("Database engine or Base not initialized. Cannot create tables.")
         if 'st' in globals() and hasattr(st, 'error'):
             st.error("Database connection components (engine/Base) failed to initialize. Database features will not work.")
-
