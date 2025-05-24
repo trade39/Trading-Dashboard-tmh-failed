@@ -1,3 +1,4 @@
+
 streamlit>=1.38.0
 pandas>=2.2.0
 numpy>=1.26.0
@@ -9,11 +10,13 @@ pymc>=5.10.0 # Kept for now, but monitor if issues persist
 
 sqlalchemy>=2.0.0 # For ORM and database interaction (works with SQLite and others)
 
+copulas>=0.11.0 # Commented out as a likely cause of installation issues
 pmdarima>=2.0.4 # Handled conditionally in ai_models.py
+
 prophet>=1.1.5 # Commented out as a likely cause of installation issues
 
-tensorflow>=2.17.0 # Uncomment if TensorFlow is actively used
-torch>=2.4.0 # Uncomment if PyTorch is actively used
+tensorflow>=2.17.0 # Explicitly commented out due to Python 3.13 compatibility issues on Streamlit Cloud
+torch>=2.4.0 # Explicitly commented out
 
 lifelines>=0.28.0
 ruptures>=1.1.9
