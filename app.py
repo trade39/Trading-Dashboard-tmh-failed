@@ -17,7 +17,7 @@ try:
         CONCEPTUAL_COLUMN_CATEGORIES,
         RISK_FREE_RATE, LOG_FILE, LOG_LEVEL, LOG_FORMAT,
         DEFAULT_BENCHMARK_TICKER, AVAILABLE_BENCHMARKS, EXPECTED_COLUMNS,
-        APP_BASE_URL # Added for reset link construction (though service uses it)
+        APP_BASE_URL
     )
     from kpi_definitions import KPI_CONFIG
     from utils.logger import setup_logger
@@ -30,17 +30,35 @@ try:
         create_db_tables, get_benchmark_data_static
     )
 except ImportError as e:
-    st.error(f"Fatal Error: Critical module import failed: {e}. App cannot start.")
-    logging.basicConfig(level=logging.ERROR); logging.error(f"Fatal Error: {e}", exc_info=True)
+    st.error(f"Fatal Error: A critical module could not be imported. App cannot start. Details: {e}")
+    logging.basicConfig(level=logging.ERROR)
+    logging.error(f"Fatal Error during initial imports: {e}", exc_info=True)
+    # Fallback definitions
     APP_TITLE="TradingAppError"; RISK_FREE_RATE=0.02; DEFAULT_BENCHMARK_TICKER="SPY"; AVAILABLE_BENCHMARKS={"None":""}; APP_BASE_URL=""
-    class DataService: pass; class AnalysisService: pass; class AuthService: pass;
-    def create_db_tables(): pass; def get_benchmark_data_static(*args, **kwargs): return None
-    class SidebarManager: def __init__(self,*args): pass; def render_sidebar_controls(self): return {}
-    class ColumnMapperUI: def __init__(self,*args,**kwargs): pass; def render(self): return None
-    class ScrollButtons: def __init__(self,*args,**kwargs): pass; def render(self): pass
-    def load_css(f): pass; def display_custom_message(m,t): st.error(m); def setup_logger(**kwargs): return logging.getLogger(APP_TITLE)
+    class DataServiceFallback: pass
+    class AnalysisServiceFallback: pass
+    class AuthServiceFallback: pass
+    DataService = DataServiceFallback
+    AnalysisService = AnalysisServiceFallback
+    AuthService = AuthServiceFallback
+    def create_db_tables(): pass
+    def get_benchmark_data_static(*args, **kwargs): return None
+    class SidebarManager:
+        def __init__(self,*args): pass
+        def render_sidebar_controls(self): return {}
+    class ColumnMapperUI:
+        def __init__(self,*args,**kwargs): pass
+        def render(self): return None
+    class ScrollButtons:
+        def __init__(self,*args,**kwargs): pass
+        def render(self): pass
+    def load_css(f): pass
+    def display_custom_message(m,t="error"): st.error(m) # Ensure default for t
+    def setup_logger(**kwargs): return logging.getLogger(APP_TITLE)
     st.stop()
 
+
+# --- Page Config, Logger, Services, DB Init (as before) ---
 PAGE_CONFIG_APP_TITLE = APP_TITLE
 LOGO_PATH_FOR_BROWSER_TAB = "assets/Trading_Mastery_Hub_600x600.png"
 st.set_page_config(page_title=PAGE_CONFIG_APP_TITLE, page_icon=LOGO_PATH_FOR_BROWSER_TAB, layout="wide", initial_sidebar_state="expanded", menu_items={})
@@ -65,24 +83,21 @@ except Exception as e_css: logger.error(f"Failed to load style.css: {e_css}", ex
 
 if 'authenticated_user' not in st.session_state: st.session_state.authenticated_user = None
 if 'auth_flow_page' not in st.session_state: st.session_state.auth_flow_page = 'login'
-# New state for password reset token from URL
 if 'password_reset_token' not in st.session_state: st.session_state.password_reset_token = None
 
 # --- Handle Password Reset Token from URL ---
-query_params = st.query_params # Use new API
-if "page" in query_params and query_params["page"] == "reset_password_form" and "token" in query_params:
-    token_from_url = query_params["token"]
-    if isinstance(token_from_url, list): token_from_url = token_from_url[0] # Take first if multiple
+query_params = st.query_params
+if "page" in query_params and query_params.get("page") == "reset_password_form" and "token" in query_params:
+    token_from_url = query_params.get("token")
+    if isinstance(token_from_url, list): token_from_url = token_from_url[0]
 
-    if token_from_url and st.session_state.auth_flow_page != 'reset_password_form': # Only process if not already on form
+    if token_from_url and st.session_state.auth_flow_page != 'reset_password_form':
         st.session_state.password_reset_token = token_from_url
         st.session_state.auth_flow_page = 'reset_password_form'
-        logger.info(f"Password reset token '{token_from_url[:8]}...' received from URL. Switching to reset form.")
-        # Clear query params after processing to prevent reuse on refresh / direct link sharing
-        st.query_params.clear()
-        st.rerun() # Rerun to show the reset form immediately
+        logger.info(f"Password reset token '{token_from_url[:8]}...' received. Switching to reset form.")
+        st.query_params.clear() # Clear after processing
+        st.rerun()
 
-# ... (other session state inits as before) ...
 if 'selected_user_file_id' not in st.session_state: st.session_state.selected_user_file_id = None
 if 'current_file_content_for_processing' not in st.session_state: st.session_state.current_file_content_for_processing = None
 if 'pending_file_to_save_content' not in st.session_state: st.session_state.pending_file_to_save_content = None
@@ -98,7 +113,7 @@ def display_login_form():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
         auth_area_container = st.container(border=True)
         with auth_area_container:
-            with st.form("login_form_main_v3_reset"): # New key
+            with st.form("login_form_main_v3_reset"):
                 st.markdown(f"<h2 style='text-align: center;'>Login to {APP_TITLE}</h2>", unsafe_allow_html=True)
                 username = st.text_input("Username", key="login_username_main_v3_reset")
                 password = st.text_input("Password", type="password", key="login_password_main_v3_reset")
@@ -117,34 +132,39 @@ def display_login_form():
                             else: st.session_state.user_preferences = {'default_theme': 'dark', 'default_risk_free_rate': RISK_FREE_RATE, 'default_benchmark_ticker': DEFAULT_BENCHMARK_TICKER}
                             st.success(f"Welcome back, {username}!"); st.rerun()
                         else: st.error("Invalid username or password.")
-            
             col_auth_links1, col_auth_links2 = st.columns(2)
             with col_auth_links1:
                 if st.button("Forgot Password?", use_container_width=True, key="forgot_password_link_v1"):
-                    st.session_state.auth_flow_page = 'forgot_password_request'
-                    st.rerun()
+                    st.session_state.auth_flow_page = 'forgot_password_request'; st.rerun()
             with col_auth_links2:
-                if st.button("Register New Account", use_container_width=True, key="goto_register_btn_main_v5_reset"): # New key
-                    st.session_state.auth_flow_page = 'register'
-                    st.rerun()
+                if st.button("Register New Account", use_container_width=True, key="goto_register_btn_main_v5_reset"):
+                    st.session_state.auth_flow_page = 'register'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
 def display_registration_form():
-    # ... (implementation as before, with password complexity info) ...
     with st.container():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
         auth_area_container = st.container(border=True)
         with auth_area_container:
             st.markdown(f"<h2 style='text-align: center;'>Register for {APP_TITLE}</h2>", unsafe_allow_html=True)
-            st.markdown("""<small>Password must: be 8+ chars, include uppercase, lowercase, digit, and special character.</small>""", unsafe_allow_html=True)
+            st.markdown("""
+            <small>Password must:
+            <ul>
+                <li>Be at least 8 characters long</li>
+                <li>Contain at least one uppercase letter (A-Z)</li>
+                <li>Contain at least one lowercase letter (a-z)</li>
+                <li>Contain at least one digit (0-9)</li>
+                <li>Contain at least one special character (e.g., !@#$%^&*)</li>
+            </ul></small>
+            """, unsafe_allow_html=True)
             with st.form("registration_form_main_v4_complexity"):
                 reg_username = st.text_input("Username", key="reg_username_main_v4")
-                reg_email = st.text_input("Email (Required for password reset)", key="reg_email_main_v4") # Emphasize email for reset
+                reg_email = st.text_input("Email (Required for password reset)", key="reg_email_main_v4")
                 reg_password = st.text_input("Password", type="password", key="reg_password_main_v4")
                 reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm_main_v4")
                 reg_submitted = st.form_submit_button("Register", use_container_width=True, type="primary")
                 if reg_submitted:
-                    if not reg_username or not reg_password or not reg_password_confirm or not reg_email: # Email now required for reset
+                    if not reg_username or not reg_password or not reg_password_confirm or not reg_email:
                         st.error("Username, Email, password, and confirmation are required.")
                     elif reg_password != reg_password_confirm: st.error("Passwords do not match.")
                     else:
@@ -162,24 +182,18 @@ def display_forgot_password_request_form():
         auth_area_container = st.container(border=True)
         with auth_area_container:
             st.markdown(f"<h2 style='text-align: center;'>Forgot Password</h2>", unsafe_allow_html=True)
-            st.write("Enter your email address below. If an account exists for this email, we will send instructions to reset your password.")
+            st.write("Enter your email. If an account exists, a reset link will be sent.")
             with st.form("forgot_password_request_form_v1"):
                 email_input = st.text_input("Your Email Address", key="forgot_pw_email_v1")
                 submit_request = st.form_submit_button("Send Reset Link", use_container_width=True, type="primary")
-
                 if submit_request:
-                    if not email_input:
-                        st.error("Please enter your email address.")
+                    if not email_input: st.error("Please enter your email address.")
                     else:
-                        with st.spinner("Processing request..."):
-                            result = auth_service.create_password_reset_token(email_input)
-                        if result.get("success"):
-                            st.success(result["success"]) # Generic success message
-                        else:
-                            st.error(result.get("error", "Could not process request. Please try again."))
+                        with st.spinner("Processing..."): result = auth_service.create_password_reset_token(email_input)
+                        if result.get("success"): st.success(result["success"])
+                        else: st.error(result.get("error", "Could not process request."))
             if st.button("Back to Login", use_container_width=True, key="forgot_pw_back_to_login_v1"):
-                st.session_state.auth_flow_page = 'login'
-                st.rerun()
+                st.session_state.auth_flow_page = 'login'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
 def display_reset_password_form():
@@ -189,64 +203,31 @@ def display_reset_password_form():
         with auth_area_container:
             st.markdown(f"<h2 style='text-align: center;'>Reset Your Password</h2>", unsafe_allow_html=True)
             token = st.session_state.get('password_reset_token')
-
             if not token:
-                st.error("No reset token found or token is invalid. Please request a new password reset link.")
-                if st.button("Request New Reset Link", use_container_width=True, key="reset_form_req_new_link_v1"):
-                    st.session_state.auth_flow_page = 'forgot_password_request'
-                    st.session_state.password_reset_token = None # Clear any invalid token
-                    st.rerun()
+                st.error("Invalid or missing reset token. Please request a new link.");
+                if st.button("Request New Link",use_container_width=True,key="reset_form_req_new_link_v1"):
+                    st.session_state.auth_flow_page = 'forgot_password_request'; st.session_state.password_reset_token = None; st.rerun()
                 st.markdown("</div></div>", unsafe_allow_html=True); return
-
-            # Verify token (optional: could be done once on load, or also before form submit)
-            # For simplicity, we'll primarily rely on the submit action to verify and reset.
-            # A pre-check could be:
-            # if not auth_service.verify_password_reset_token(token):
-            #     st.error("This password reset link is invalid or has expired. Please request a new one.")
-            #     # ... button to request new link ...
-            #     return
-
-            st.markdown("""
-            <small>New password must meet the following criteria:
-            <ul>
-                <li>At least 8 characters long</li>
-                <li>At least one uppercase letter (A-Z)</li>
-                <li>At least one lowercase letter (a-z)</li>
-                <li>At least one digit (0-9)</li>
-                <li>At least one special character (e.g., !@#$%^&*)</li>
-            </ul></small>
-            """, unsafe_allow_html=True)
-
+            
+            st.markdown("""<small>New password must meet complexity rules (8+ chars, upper, lower, digit, special).</small>""", unsafe_allow_html=True)
             with st.form("reset_password_form_v1"):
                 new_password = st.text_input("New Password", type="password", key="reset_pw_new_v1")
                 confirm_new_password = st.text_input("Confirm New Password", type="password", key="reset_pw_confirm_v1")
                 submit_reset = st.form_submit_button("Reset Password", use_container_width=True, type="primary")
-
                 if submit_reset:
-                    if not new_password or not confirm_new_password:
-                        st.error("Please enter and confirm your new password.")
-                    elif new_password != confirm_new_password:
-                        st.error("New passwords do not match.")
+                    if not new_password or not confirm_new_password: st.error("Please enter and confirm your new password.")
+                    elif new_password != confirm_new_password: st.error("New passwords do not match.")
                     else:
-                        with st.spinner("Resetting password..."):
-                            result = auth_service.reset_password_with_token(token, new_password)
-                        
+                        with st.spinner("Resetting..."): result = auth_service.reset_password_with_token(token, new_password)
                         if result.get("success"):
-                            st.success(result["success"])
-                            st.info("You can now log in with your new password.")
-                            st.session_state.auth_flow_page = 'login'
-                            st.session_state.password_reset_token = None # Clear token
+                            st.success(result["success"]); st.info("You can now log in.");
+                            st.session_state.auth_flow_page = 'login'; st.session_state.password_reset_token = None
                             if st.button("Go to Login", key="reset_pw_goto_login_success_v1"): st.rerun()
-                        else:
-                            st.error(result.get("error", "Could not reset password. The link may be invalid or expired."))
-            
-            if st.button("Cancel and go to Login", use_container_width=True, type="secondary", key="reset_pw_cancel_v1"):
-                st.session_state.auth_flow_page = 'login'
-                st.session_state.password_reset_token = None
-                st.rerun()
+                        else: st.error(result.get("error", "Could not reset password."))
+            if st.button("Cancel", use_container_width=True, type="secondary", key="reset_pw_cancel_v1"):
+                st.session_state.auth_flow_page = 'login'; st.session_state.password_reset_token = None; st.rerun()
         st.markdown("</div></div>", unsafe_allow_html=True)
 
-# --- Auth Flow (Updated) ---
 if st.session_state.authenticated_user is None:
     st.sidebar.empty()
     if st.session_state.auth_flow_page == 'login': display_login_form()
@@ -256,28 +237,12 @@ if st.session_state.authenticated_user is None:
     else: st.session_state.auth_flow_page = 'login'; display_login_form()
     st.stop()
 
-# --- Authenticated App Logic (as before) ---
 current_user_id = st.session_state.authenticated_user['user_id']
 current_username = st.session_state.authenticated_user['username']
-# ... (rest of the app.py, including file processing, sidebar, KPI calculations, main page layout, etc.)
-# This part remains largely unchanged from the "User Settings Persistence" update.
-# Ensure all previous updates are integrated here.
 
-# (File Save/Load, Session State Init, Sidebar, Data Processing Pipeline, KPI Calc, Main Layout - as before)
-# ... (Copy the entire authenticated part of app.py from the previous "User Settings Persistence" update here) ...
-# For brevity, I'm omitting the repetition of the large authenticated section of app.py.
-# Assume it's identical to the version from the user_scoping_app_py_settings.py immersive.
-# The key changes for password reset are primarily in the authentication flow section above.
-
-# --- Placeholder for the rest of app.py after authentication ---
-# This is where the sidebar rendering, data processing, KPI calculations,
-# and main page layout logic (main_page_layout()) would go.
-# These sections were detailed in the "User Settings Persistence" update.
-# For this specific "Password Reset" update, those sections don't need direct changes
-# beyond ensuring they are correctly placed after the updated authentication flow.
-
-# --- Example of where the rest of the app logic starts ---
-# (Copied from previous version for context, no new changes in this block for password reset)
+# --- Main App Logic (File Processing, Sidebar, KPIs, etc. - as before) ---
+# This section assumes the code from "User Settings Persistence" update is present here.
+# For brevity, only showing a small part of it.
 if st.session_state.get('trigger_file_save_processing') and st.session_state.get('pending_file_to_save_content') is not None:
     file_content_to_save_bytes = st.session_state.pending_file_to_save_content; original_name_to_save = st.session_state.pending_file_to_save_name
     st.session_state.trigger_file_save_processing = False; st.session_state.pending_file_to_save_content = None; st.session_state.pending_file_to_save_name = None
