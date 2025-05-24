@@ -1,4 +1,4 @@
-# app.py - Main Entry Point
+# app.py - Main Entry Point for Multi-Page Trading Performance Dashboard
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -25,7 +25,7 @@ try:
     from components.column_mapper_ui import ColumnMapperUI
     from components.scroll_buttons import ScrollButtons
     
-    from services import ( # Import from the services package
+    from services import ( 
         DataService, 
         AnalysisService, 
         AuthService,
@@ -33,7 +33,7 @@ try:
         get_benchmark_data_static 
     )
 except ImportError as e:
-    st.error(f"Fatal Error: A critical module could not be imported. App cannot start. Details: {e}")
+    st.error(f"Fatal Error: A critical module could not be imported. The application cannot start. Details: {e}")
     logging.basicConfig(level=logging.ERROR)
     logging.error(f"Fatal Error during initial imports: {e}", exc_info=True)
     APP_TITLE = "TradingAppError" 
@@ -74,7 +74,6 @@ except Exception as db_init_e:
     logger.critical(f"Failed to initialize database tables via centralized function: {db_init_e}", exc_info=True)
     st.error(f"Database Initialization Error: {db_init_e}. The application might not function correctly.")
 
-# ... (rest of app.py as provided in the previous turn, including theme management, auth UI, and main app logic) ...
 # --- Theme Management & CSS ---
 if 'current_theme' not in st.session_state:
     st.session_state.current_theme = "dark"
@@ -102,52 +101,64 @@ if 'auth_flow_page' not in st.session_state: st.session_state.auth_flow_page = '
 def display_login_form():
     with st.container():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
-        with st.form("login_form", border=True):
-            st.markdown(f"<h2 style='text-align: center;'>Login to {APP_TITLE}</h2>", unsafe_allow_html=True)
-            username = st.text_input("Username", key="login_username")
-            password = st.text_input("Password", type="password", key="login_password")
-            submitted = st.form_submit_button("Login", use_container_width=True, type="primary")
+        # Form container
+        form_container = st.container(border=True) # Use a separate container for the form itself
+        with form_container:
+            with st.form("login_form"): # Removed border=True from here, as outer container has it
+                st.markdown(f"<h2 style='text-align: center;'>Login to {APP_TITLE}</h2>", unsafe_allow_html=True)
+                username = st.text_input("Username", key="login_username")
+                password = st.text_input("Password", type="password", key="login_password")
+                submitted = st.form_submit_button("Login", use_container_width=True, type="primary")
 
-            if submitted:
-                if not username or not password: st.error("Username and password are required.")
-                else:
-                    user = auth_service.authenticate_user(username, password)
-                    if user:
-                        st.session_state.authenticated_user = {'user_id': user.id, 'username': user.username}
-                        st.session_state.auth_flow_page = None
-                        logger.info(f"User '{username}' logged in successfully.")
-                        st.success(f"Welcome back, {username}!")
-                        st.rerun()
-                    else: st.error("Invalid username or password.")
-            if st.button("Don't have an account? Register", use_container_width=True, key="goto_register_btn"):
+                if submitted:
+                    if not username or not password: st.error("Username and password are required.")
+                    else:
+                        user = auth_service.authenticate_user(username, password)
+                        if user:
+                            st.session_state.authenticated_user = {'user_id': user.id, 'username': user.username}
+                            st.session_state.auth_flow_page = None
+                            logger.info(f"User '{username}' logged in successfully.")
+                            st.success(f"Welcome back, {username}!")
+                            st.rerun()
+                        else: st.error("Invalid username or password.")
+            
+            # Button to switch to registration - MOVED OUTSIDE st.form
+            if st.button("Don't have an account? Register", use_container_width=True, key="goto_register_btn_login_page"):
                 st.session_state.auth_flow_page = 'register'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
+
 
 def display_registration_form():
     with st.container():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
-        with st.form("registration_form", border=True):
-            st.markdown(f"<h2 style='text-align: center;'>Register for {APP_TITLE}</h2>", unsafe_allow_html=True)
-            reg_username = st.text_input("Username", key="reg_username")
-            reg_email = st.text_input("Email (Optional)", key="reg_email")
-            reg_password = st.text_input("Password", type="password", key="reg_password")
-            reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm")
-            reg_submitted = st.form_submit_button("Register", use_container_width=True, type="primary")
+        # Form container
+        form_container = st.container(border=True)
+        with form_container:
+            with st.form("registration_form"): # Removed border=True
+                st.markdown(f"<h2 style='text-align: center;'>Register for {APP_TITLE}</h2>", unsafe_allow_html=True)
+                reg_username = st.text_input("Username", key="reg_username")
+                reg_email = st.text_input("Email (Optional)", key="reg_email")
+                reg_password = st.text_input("Password", type="password", key="reg_password")
+                reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm")
+                reg_submitted = st.form_submit_button("Register", use_container_width=True, type="primary")
 
-            if reg_submitted:
-                if not reg_username or not reg_password or not reg_password_confirm: st.error("Username, password, and confirmation are required.")
-                elif reg_password != reg_password_confirm: st.error("Passwords do not match.")
-                elif len(reg_password) < 8: st.error("Password must be at least 8 characters long.")
-                else:
-                    user = auth_service.register_user(reg_username, reg_password, reg_email if reg_email else None)
-                    if user:
-                        st.success(f"User '{reg_username}' registered successfully! Please login."); st.session_state.auth_flow_page = 'login'; st.rerun()
+                if reg_submitted:
+                    if not reg_username or not reg_password or not reg_password_confirm: st.error("Username, password, and confirmation are required.")
+                    elif reg_password != reg_password_confirm: st.error("Passwords do not match.")
+                    elif len(reg_password) < 8: st.error("Password must be at least 8 characters long.")
                     else:
-                        if auth_service.get_user_by_username(reg_username): st.error(f"Username '{reg_username}' already exists.")
-                        else: st.error("Registration failed. Username/email might be taken or internal error.")
-            if st.button("Already have an account? Login", use_container_width=True, key="goto_login_btn"):
+                        user = auth_service.register_user(reg_username, reg_password, reg_email if reg_email else None)
+                        if user:
+                            st.success(f"User '{reg_username}' registered successfully! Please login."); st.session_state.auth_flow_page = 'login'; st.rerun()
+                        else:
+                            if auth_service.get_user_by_username(reg_username): st.error(f"Username '{reg_username}' already exists.")
+                            else: st.error("Registration failed. Username/email might be taken or internal error.")
+            
+            # Button to switch to login - MOVED OUTSIDE st.form
+            if st.button("Already have an account? Login", use_container_width=True, key="goto_login_btn_reg_page"):
                 st.session_state.auth_flow_page = 'login'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
+
 
 if st.session_state.authenticated_user is None:
     st.sidebar.empty()
@@ -156,6 +167,7 @@ if st.session_state.authenticated_user is None:
     else: st.session_state.auth_flow_page = 'login'; display_login_form()
     st.stop()
 
+# --- USER IS AUTHENTICATED ---
 default_session_state_main_app = {
     'app_initialized': True, 'processed_data': None, 'filtered_data': None,
     'kpi_results': None, 'kpi_confidence_intervals': {},
@@ -368,3 +380,4 @@ if not uploaded_file and st.session_state.processed_data is None: main_page_layo
 scroll_buttons_component = ScrollButtons()
 scroll_buttons_component.render()
 logger.info(f"App run cycle finished for user '{st.session_state.authenticated_user['username']}'.")
+
