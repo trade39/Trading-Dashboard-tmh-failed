@@ -24,7 +24,8 @@ pmdarima>=2.0.4 # Handled conditionally in ai_models.py
 #If prophet is problematic, consider removing or making it optional.
 
 prophet>=1.1.5 # Commented out as a likely cause of installation issues
-TensorFlow or PyTorch for LSTMs/Transformers. Choose one or make installation optional.
+
+#TensorFlow or PyTorch for LSTMs/Transformers. Choose one or make installation optional.
 tensorflow>=2.17.0
 torch>=2.4.0
 
