@@ -1,4 +1,4 @@
-# app.py - Main Entry Point
+# app.py - Main Entry Point for Multi-Page Trading Performance Dashboard
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -100,7 +100,7 @@ if 'selected_user_file_id' not in st.session_state: st.session_state.selected_us
 if 'current_file_content_for_processing' not in st.session_state: st.session_state.current_file_content_for_processing = None
 if 'pending_file_to_save_content' not in st.session_state: st.session_state.pending_file_to_save_content = None
 if 'pending_file_to_save_name' not in st.session_state: st.session_state.pending_file_to_save_name = None
-if 'trigger_file_save_processing' not in st.session_state: st.session_state.trigger_file_save_processing = False # Renamed for clarity
+if 'trigger_file_save_processing' not in st.session_state: st.session_state.trigger_file_save_processing = False
 if 'last_uploaded_raw_file_id_tracker' not in st.session_state: st.session_state.last_uploaded_raw_file_id_tracker = None
 if 'trigger_file_load_id' not in st.session_state: st.session_state.trigger_file_load_id = None
 
@@ -172,18 +172,15 @@ if st.session_state.get('trigger_file_save_processing') and st.session_state.get
     file_content_to_save_bytes = st.session_state.pending_file_to_save_content
     original_name_to_save = st.session_state.pending_file_to_save_name
     
-    st.session_state.trigger_file_save_processing = False # Clear the trigger
+    st.session_state.trigger_file_save_processing = False 
     st.session_state.pending_file_to_save_content = None
     st.session_state.pending_file_to_save_name = None
 
     temp_uploaded_file_for_service = BytesIO(file_content_to_save_bytes)
     temp_uploaded_file_for_service.name = original_name_to_save 
 
-    # Use spinner in the main application area
-    main_area_placeholder = st.empty() # Create a placeholder in the main area
+    main_area_placeholder = st.empty() 
     with main_area_placeholder.status(f"Saving '{original_name_to_save}' to your account...", expanded=True):
-        # st.spinner is not needed if using st.status
-        # with st.spinner(f"Saving '{original_name_to_save}' to your account... Please wait."):
         st.write(f"Uploading and saving '{original_name_to_save}'...")
         saved_user_file_record = data_service.save_user_file(current_user_id, temp_uploaded_file_for_service)
         if saved_user_file_record:
@@ -194,10 +191,9 @@ if st.session_state.get('trigger_file_save_processing') and st.session_state.get
             st.session_state.column_mapping_confirmed = False 
             st.session_state.uploaded_file_name = saved_user_file_record.original_file_name
             logger.info(f"File '{saved_user_file_record.original_file_name}' saved for user {current_user_id}. Triggering rerun to load.")
-            st.rerun() # Rerun to load the newly selected file and clear spinner
+            st.rerun() 
         else:
             st.error(f"Could not save the file '{original_name_to_save}'. Please try uploading again.")
-            # No rerun here, error message stays.
 
 # --- Process Pending File Load (Moved to main area) ---
 if st.session_state.get('trigger_file_load_id') is not None:
@@ -224,37 +220,48 @@ if st.session_state.get('trigger_file_load_id') is not None:
                 st.error(f"Could not load the content for file: {selected_file_record_for_load.original_file_name}.")
                 st.session_state.current_file_content_for_processing = None
                 st.session_state.selected_user_file_id = None
-    elif file_id_to_load is not None: # Only show error if a load was actually triggered
+    elif file_id_to_load is not None: 
         st.error(f"Selected file (ID: {file_id_to_load}) not found or access denied.")
         st.session_state.selected_user_file_id = None
 
-
 # --- Initialize Main App Session State (if not already done) ---
-default_session_state_main_app = { /* ... as before ... */ }
-# ... (session state initialization as before) ...
+# CORRECTED: Replaced placeholder comment with actual dictionary definition
 default_session_state_main_app = {
-    'app_initialized': True, 'processed_data': None, 'filtered_data': None,
-    'kpi_results': None, 'kpi_confidence_intervals': {},
-    'risk_free_rate': RISK_FREE_RATE, 'uploaded_file_name': None,
-    'uploaded_file_bytes_for_mapper': None, 'last_processed_file_id': None,
-    'user_column_mapping': None, 'column_mapping_confirmed': False,
-    'csv_headers_for_mapping': None, 'last_uploaded_file_for_mapping_id': None,
-    'last_applied_filters': None, 'sidebar_filters': None, 
-    'selected_benchmark_ticker': DEFAULT_BENCHMARK_TICKER,
-    'benchmark_daily_returns': None, 'initial_capital': 100000.0,
-    'last_fetched_benchmark_ticker': None, 'last_benchmark_data_filter_shape': None,
-    'last_kpi_calc_state_id': None, 'max_drawdown_period_details': None
+    'app_initialized': True, 
+    'processed_data': None, 
+    'filtered_data': None,
+    'kpi_results': None, 
+    'kpi_confidence_intervals': {},
+    'risk_free_rate': RISK_FREE_RATE, 
+    'uploaded_file_name': None,
+    'uploaded_file_bytes_for_mapper': None, 
+    'last_processed_file_id': None,
+    'user_column_mapping': None, 
+    'column_mapping_confirmed': False,
+    'csv_headers_for_mapping': None, 
+    'last_uploaded_file_for_mapping_id': None,
+    'last_applied_filters': None, 
+    'sidebar_filters': None, 
+    'selected_benchmark_ticker': DEFAULT_BENCHMARK_TICKER, # From config
+    'benchmark_daily_returns': None, 
+    'initial_capital': 100000.0, # Default value
+    'last_fetched_benchmark_ticker': None, 
+    'last_benchmark_data_filter_shape': None,
+    'last_kpi_calc_state_id': None, 
+    'max_drawdown_period_details': None
+    # 'active_tab' is usually managed by Streamlit's multipage app feature itself
+    # and doesn't need to be in default session state unless you have custom tab logic.
 }
 default_session_state_main_app['selected_benchmark_display_name'] = next(
     (name for name, ticker_val in AVAILABLE_BENCHMARKS.items() if ticker_val == default_session_state_main_app['selected_benchmark_ticker']), "None"
 )
-for key, value in default_session_state_main_app.items():
-    if key not in st.session_state: st.session_state[key] = value
 
+for key, value in default_session_state_main_app.items():
+    if key not in st.session_state: 
+        st.session_state[key] = value
 
 # --- Sidebar for Authenticated User ---
 LOGO_PATH_SIDEBAR = "assets/Trading_Mastery_Hub_600x600.png"
-# ... (logo rendering as before) ...
 logo_base64 = None
 if os.path.exists(LOGO_PATH_SIDEBAR):
     try:
@@ -306,13 +313,12 @@ if selected_file_id_from_sidebar_dropdown == "upload_new":
         if st.session_state.get('last_uploaded_raw_file_id_tracker') != current_raw_file_id:
             st.session_state.pending_file_to_save_content = newly_uploaded_file_object.getvalue()
             st.session_state.pending_file_to_save_name = newly_uploaded_file_object.name
-            st.session_state.trigger_file_save_processing = True # Use new trigger name
+            st.session_state.trigger_file_save_processing = True 
             st.session_state.last_uploaded_raw_file_id_tracker = current_raw_file_id
             logger.debug(f"New file '{newly_uploaded_file_object.name}' detected. Setting trigger_file_save_processing.")
             st.rerun() 
 elif selected_file_id_from_sidebar_dropdown is not None and \
      st.session_state.selected_user_file_id != selected_file_id_from_sidebar_dropdown:
-    # User selected a different existing file from dropdown
     st.session_state.trigger_file_load_id = selected_file_id_from_sidebar_dropdown
     logger.debug(f"User selected existing file ID {selected_file_id_from_sidebar_dropdown}. Setting trigger_file_load_id.")
     st.rerun()
@@ -333,7 +339,6 @@ current_sidebar_filters = sidebar_manager.render_sidebar_controls()
 st.session_state.sidebar_filters = current_sidebar_filters
 
 if current_sidebar_filters:
-    # ... (filter update logic as before) ...
     rfr_from_sidebar = current_sidebar_filters.get('risk_free_rate', RISK_FREE_RATE)
     if st.session_state.risk_free_rate != rfr_from_sidebar: st.session_state.risk_free_rate = rfr_from_sidebar; st.session_state.kpi_results = None
     benchmark_ticker_from_sidebar = current_sidebar_filters.get('selected_benchmark_ticker', "")
@@ -351,7 +356,6 @@ active_processing_file_identifier = st.session_state.selected_user_file_id if (s
 
 @log_execution_time
 def get_and_process_data_with_profiling(file_obj, mapping, name):
-    # ... (implementation as before) ...
     if hasattr(file_obj, 'getvalue') and not isinstance(file_obj, BytesIO):
         file_bytes_io = BytesIO(file_obj.getvalue()); file_bytes_io.seek(0)
         return data_service.get_processed_trading_data(file_bytes_io, user_column_mapping=mapping, original_file_name=name)
@@ -361,7 +365,6 @@ def get_and_process_data_with_profiling(file_obj, mapping, name):
     logger.error("get_and_process_data_with_profiling: file_obj is not compatible."); return None
 
 if active_file_content_to_process and active_file_name_for_processing:
-    # ... (column mapping and data processing logic as before) ...
     if st.session_state.last_uploaded_file_for_mapping_id != active_processing_file_identifier or not st.session_state.column_mapping_confirmed:
         logger.info(f"File '{active_file_name_for_processing}' (ID: {active_processing_file_identifier}) needs mapping.")
         st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None
@@ -400,7 +403,6 @@ elif not active_file_content_to_process and st.session_state.authenticated_user:
             if key_val in st.session_state: st.session_state[key_val] = None
 
 # --- Data Filtering, Benchmark Fetching, KPI Calculation (as before) ---
-# ... (This entire section remains the same) ...
 @log_execution_time
 def filter_data_with_profiling(df, filters, col_map): return data_service.filter_data(df, filters, col_map)
 
@@ -447,7 +449,7 @@ if st.session_state.filtered_data is not None and not st.session_state.filtered_
     current_kpi_state_id = tuple(current_kpi_state_id_parts)
     if st.session_state.kpi_results is None or st.session_state.last_kpi_calc_state_id != current_kpi_state_id:
         logger.info("Recalculating KPIs...")
-        with st.spinner("Calculating metrics..."): # This spinner is for KPI calculation
+        with st.spinner("Calculating metrics..."): 
             kpi_res = get_core_kpis_with_profiling(st.session_state.filtered_data, st.session_state.risk_free_rate, st.session_state.benchmark_daily_returns, st.session_state.initial_capital)
             if kpi_res and 'error' not in kpi_res:
                 st.session_state.kpi_results = kpi_res; st.session_state.last_kpi_calc_state_id = current_kpi_state_id
@@ -474,9 +476,7 @@ elif st.session_state.filtered_data is not None and st.session_state.filtered_da
     if st.session_state.processed_data is not None and not st.session_state.processed_data.empty: display_custom_message("No data matches filters.", "info")
     st.session_state.kpi_results = None; st.session_state.kpi_confidence_intervals = {}; st.session_state.max_drawdown_period_details = None
 
-# --- Welcome Page / Main Content Display Logic ---
 def main_page_layout():
-    # ... (implementation as before) ...
     st.markdown("<div class='welcome-container'>", unsafe_allow_html=True)
     st.markdown("<div class='hero-section'><h1 class='welcome-title'>Trading Dashboard</h1>", unsafe_allow_html=True)
     st.markdown(f"<p class='welcome-subtitle'>Powered by {PAGE_CONFIG_APP_TITLE}</p></div>", unsafe_allow_html=True)
@@ -489,7 +489,7 @@ def main_page_layout():
     st.markdown("<br><div style='text-align: center; margin-top: 30px;'>", unsafe_allow_html=True)
     user_guide_page_path = "pages/0_❓_User_Guide.py"
     if os.path.exists(user_guide_page_path):
-        if st.button("📘 Read User Guide", key="welcome_guide_btn_auth_v3"): # Incremented key
+        if st.button("📘 Read User Guide", key="welcome_guide_btn_auth_v3"): 
              st.switch_page(user_guide_page_path)
     else: st.markdown("<p>User guide not found.</p>", unsafe_allow_html=True); logger.warning(f"User Guide not found: {user_guide_page_path}")
     st.markdown("</div></div>", unsafe_allow_html=True)
@@ -500,3 +500,4 @@ if not active_file_content_to_process and not (st.session_state.get('column_mapp
 scroll_buttons_component = ScrollButtons()
 scroll_buttons_component.render()
 logger.info(f"App run cycle finished for user '{current_username}'.")
+
