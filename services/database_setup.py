@@ -6,7 +6,7 @@ import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base, Session # <<< THIS IMPORT IS CRUCIAL
 import streamlit as st
-from typing import Optional # Ensure Optional is imported if used in type hints
+from typing import Optional # Ensure Optional is imported
 
 try:
     from config import APP_TITLE, DATABASE_URL
