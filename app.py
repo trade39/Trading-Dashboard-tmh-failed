@@ -100,21 +100,20 @@ if 'selected_user_file_id' not in st.session_state: st.session_state.selected_us
 if 'current_file_content_for_processing' not in st.session_state: st.session_state.current_file_content_for_processing = None
 if 'pending_file_to_save_content' not in st.session_state: st.session_state.pending_file_to_save_content = None
 if 'pending_file_to_save_name' not in st.session_state: st.session_state.pending_file_to_save_name = None
-if 'trigger_file_save' not in st.session_state: st.session_state.trigger_file_save = False
+if 'trigger_file_save_processing' not in st.session_state: st.session_state.trigger_file_save_processing = False # Renamed for clarity
 if 'last_uploaded_raw_file_id_tracker' not in st.session_state: st.session_state.last_uploaded_raw_file_id_tracker = None
-if 'trigger_file_load_id' not in st.session_state: st.session_state.trigger_file_load_id = None # New: ID of file to load
+if 'trigger_file_load_id' not in st.session_state: st.session_state.trigger_file_load_id = None
 
 
 def display_login_form():
-    # ... (implementation as before) ...
     with st.container():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
         auth_area_container = st.container(border=True) 
         with auth_area_container:
-            with st.form("login_form_main_v2"):
+            with st.form("login_form_main_v3"): 
                 st.markdown(f"<h2 style='text-align: center;'>Login to {APP_TITLE}</h2>", unsafe_allow_html=True)
-                username = st.text_input("Username", key="login_username_main_v2")
-                password = st.text_input("Password", type="password", key="login_password_main_v2")
+                username = st.text_input("Username", key="login_username_main_v3")
+                password = st.text_input("Password", type="password", key="login_password_main_v3")
                 submitted = st.form_submit_button("Login", use_container_width=True, type="primary")
                 if submitted:
                     if not username or not password: st.error("Username and password are required.")
@@ -126,22 +125,21 @@ def display_login_form():
                             logger.info(f"User '{username}' logged in successfully.")
                             st.success(f"Welcome back, {username}!"); st.rerun()
                         else: st.error("Invalid username or password.")
-            if st.button("Don't have an account? Register", use_container_width=True, key="goto_register_btn_main_v3"):
+            if st.button("Don't have an account? Register", use_container_width=True, key="goto_register_btn_main_v4"):
                 st.session_state.auth_flow_page = 'register'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
 def display_registration_form():
-    # ... (implementation as before) ...
     with st.container():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
         auth_area_container = st.container(border=True)
         with auth_area_container:
-            with st.form("registration_form_main_v2"): 
+            with st.form("registration_form_main_v3"): 
                 st.markdown(f"<h2 style='text-align: center;'>Register for {APP_TITLE}</h2>", unsafe_allow_html=True)
-                reg_username = st.text_input("Username", key="reg_username_main_v2")
-                reg_email = st.text_input("Email (Optional)", key="reg_email_main_v2")
-                reg_password = st.text_input("Password", type="password", key="reg_password_main_v2")
-                reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm_main_v2")
+                reg_username = st.text_input("Username", key="reg_username_main_v3")
+                reg_email = st.text_input("Email (Optional)", key="reg_email_main_v3")
+                reg_password = st.text_input("Password", type="password", key="reg_password_main_v3")
+                reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm_main_v3")
                 reg_submitted = st.form_submit_button("Register", use_container_width=True, type="primary")
                 if reg_submitted:
                     if not reg_username or not reg_password or not reg_password_confirm: st.error("Username, password, and confirmation are required.")
@@ -154,7 +152,7 @@ def display_registration_form():
                         else:
                             if auth_service.get_user_by_username(reg_username): st.error(f"Username '{reg_username}' already exists.")
                             else: st.error("Registration failed. Username/email might be taken or internal error.")
-            if st.button("Already have an account? Login", use_container_width=True, key="goto_login_btn_main_v3"):
+            if st.button("Already have an account? Login", use_container_width=True, key="goto_login_btn_main_v4"):
                 st.session_state.auth_flow_page = 'login'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -170,41 +168,49 @@ current_user_id = st.session_state.authenticated_user['user_id']
 current_username = st.session_state.authenticated_user['username']
 
 # --- Process Pending File Save (Moved to main area, before other UI) ---
-if st.session_state.get('trigger_file_save') and st.session_state.get('pending_file_to_save_content') is not None:
+if st.session_state.get('trigger_file_save_processing') and st.session_state.get('pending_file_to_save_content') is not None:
     file_content_to_save_bytes = st.session_state.pending_file_to_save_content
     original_name_to_save = st.session_state.pending_file_to_save_name
     
-    st.session_state.trigger_file_save = False
+    st.session_state.trigger_file_save_processing = False # Clear the trigger
     st.session_state.pending_file_to_save_content = None
     st.session_state.pending_file_to_save_name = None
 
     temp_uploaded_file_for_service = BytesIO(file_content_to_save_bytes)
     temp_uploaded_file_for_service.name = original_name_to_save 
 
-    with st.spinner(f"Saving '{original_name_to_save}' to your account... Please wait."): # Spinner in main area
+    # Use spinner in the main application area
+    main_area_placeholder = st.empty() # Create a placeholder in the main area
+    with main_area_placeholder.status(f"Saving '{original_name_to_save}' to your account...", expanded=True):
+        # st.spinner is not needed if using st.status
+        # with st.spinner(f"Saving '{original_name_to_save}' to your account... Please wait."):
+        st.write(f"Uploading and saving '{original_name_to_save}'...")
         saved_user_file_record = data_service.save_user_file(current_user_id, temp_uploaded_file_for_service)
         if saved_user_file_record:
-            st.success(f"File '{saved_user_file_record.original_file_name}' saved successfully!")
+            st.write("File saved to database record.")
             st.session_state.selected_user_file_id = saved_user_file_record.id
             st.session_state.current_file_content_for_processing = None 
             st.session_state.processed_data = None 
             st.session_state.column_mapping_confirmed = False 
             st.session_state.uploaded_file_name = saved_user_file_record.original_file_name
             logger.info(f"File '{saved_user_file_record.original_file_name}' saved for user {current_user_id}. Triggering rerun to load.")
-            st.rerun() 
+            st.rerun() # Rerun to load the newly selected file and clear spinner
         else:
             st.error(f"Could not save the file '{original_name_to_save}'. Please try uploading again.")
+            # No rerun here, error message stays.
 
-# --- Process Pending File Load (New Logic) ---
+# --- Process Pending File Load (Moved to main area) ---
 if st.session_state.get('trigger_file_load_id') is not None:
     file_id_to_load = st.session_state.trigger_file_load_id
-    st.session_state.trigger_file_load_id = None # Clear the trigger
+    st.session_state.trigger_file_load_id = None 
 
-    user_files_for_load_check = data_service.list_user_files(current_user_id) # Fetch fresh list
+    user_files_for_load_check = data_service.list_user_files(current_user_id)
     selected_file_record_for_load = next((f for f in user_files_for_load_check if f.id == file_id_to_load), None)
     
     if selected_file_record_for_load:
-        with st.spinner(f"Loading '{selected_file_record_for_load.original_file_name}'... Please wait."): # Spinner in main area
+        main_area_placeholder_load = st.empty()
+        with main_area_placeholder_load.status(f"Loading '{selected_file_record_for_load.original_file_name}'...", expanded=True):
+            st.write(f"Fetching content for '{selected_file_record_for_load.original_file_name}'...")
             file_content_bytesio = data_service.get_user_file_content(file_id_to_load, current_user_id)
             if file_content_bytesio:
                 st.session_state.current_file_content_for_processing = file_content_bytesio
@@ -212,14 +218,13 @@ if st.session_state.get('trigger_file_load_id') is not None:
                 st.session_state.uploaded_file_name = selected_file_record_for_load.original_file_name
                 st.session_state.processed_data = None 
                 st.session_state.column_mapping_confirmed = False 
-                st.sidebar.info(f"Loaded '{st.session_state.uploaded_file_name}' for analysis.") # Message in sidebar
                 logger.info(f"File ID {file_id_to_load} loaded for user {current_user_id}. Triggering rerun for processing.")
                 st.rerun()
             else:
                 st.error(f"Could not load the content for file: {selected_file_record_for_load.original_file_name}.")
                 st.session_state.current_file_content_for_processing = None
-                st.session_state.selected_user_file_id = None # Deselect if loading failed
-    else:
+                st.session_state.selected_user_file_id = None
+    elif file_id_to_load is not None: # Only show error if a load was actually triggered
         st.error(f"Selected file (ID: {file_id_to_load}) not found or access denied.")
         st.session_state.selected_user_file_id = None
 
@@ -249,8 +254,8 @@ for key, value in default_session_state_main_app.items():
 
 # --- Sidebar for Authenticated User ---
 LOGO_PATH_SIDEBAR = "assets/Trading_Mastery_Hub_600x600.png"
-logo_base64 = None
 # ... (logo rendering as before) ...
+logo_base64 = None
 if os.path.exists(LOGO_PATH_SIDEBAR):
     try:
         with open(LOGO_PATH_SIDEBAR, "rb") as image_file: logo_base64 = base64.b64encode(image_file.read()).decode()
@@ -261,7 +266,7 @@ elif os.path.exists(LOGO_PATH_SIDEBAR): st.sidebar.image(LOGO_PATH_SIDEBAR, use_
 
 st.sidebar.header(APP_TITLE)
 st.sidebar.markdown(f"Logged in as: **{current_username}**")
-if st.sidebar.button("🔒 Logout", key="logout_button_main_app_v4", use_container_width=True): # Incremented key
+if st.sidebar.button("🔒 Logout", key="logout_button_main_app_v4", use_container_width=True):
     logger.info(f"User '{current_username}' logging out.")
     keys_to_clear_on_logout = list(st.session_state.keys()) 
     for key_logout in keys_to_clear_on_logout: 
@@ -271,16 +276,15 @@ if st.sidebar.button("🔒 Logout", key="logout_button_main_app_v4", use_contain
 
 st.sidebar.markdown("---")
 toggle_label = "Switch to Dark Mode" if st.session_state.current_theme == "light" else "Switch to Light Mode"
-if st.sidebar.button(toggle_label, key="theme_toggle_button_main_app_auth_v4", use_container_width=True): # Incremented key
+if st.sidebar.button(toggle_label, key="theme_toggle_button_main_app_auth_v4", use_container_width=True):
     st.session_state.current_theme = "dark" if st.session_state.current_theme == "light" else "light"; st.rerun()
 st.sidebar.markdown("---")
 
 st.sidebar.subheader("📁 Your Trading Journals")
-user_files = data_service.list_user_files(current_user_id) # Fetch fresh list for display
+user_files = data_service.list_user_files(current_user_id) 
 file_options = {f"{f.original_file_name} (Uploaded: {f.upload_timestamp.strftime('%Y-%m-%d %H:%M')})": f.id for f in user_files}
 file_options["✨ Upload New File..."] = "upload_new"
 
-# Determine default for selectbox based on current processing state or last selection
 default_file_selection_label = "✨ Upload New File..."
 if st.session_state.selected_user_file_id and st.session_state.selected_user_file_id != "upload_new" and st.session_state.selected_user_file_id in file_options.values():
     default_file_selection_label = next((label for label, id_val in file_options.items() if id_val == st.session_state.selected_user_file_id), "✨ Upload New File...")
@@ -288,35 +292,10 @@ if st.session_state.selected_user_file_id and st.session_state.selected_user_fil
 selected_file_label_in_sidebar = st.sidebar.selectbox(
     "Select a journal or upload new:", options=list(file_options.keys()),
     index=list(file_options.keys()).index(default_file_selection_label),
-    key="select_user_file_v4" # Incremented key
+    key="select_user_file_v4" 
 )
 selected_file_id_from_sidebar_dropdown = file_options.get(selected_file_label_in_sidebar)
 
-
-# Handle selection change from dropdown for EXISTING files
-if selected_file_id_from_sidebar_dropdown != "upload_new" and \
-   selected_file_id_from_sidebar_dropdown is not None and \
-   st.session_state.selected_user_file_id != selected_file_id_from_sidebar_dropdown:
-    # User selected a different existing file
-    st.session_state.trigger_file_load_id = selected_file_id_from_sidebar_dropdown
-    logger.debug(f"User selected existing file ID {selected_file_id_from_sidebar_dropdown} from dropdown. Setting trigger_file_load_id.")
-    st.rerun()
-elif selected_file_id_from_sidebar_dropdown == "upload_new" and st.session_state.selected_user_file_id != "upload_new":
-    # User switched from an existing file to "Upload New File..."
-    # Clear current processing if a file was active, to make way for uploader
-    if st.session_state.current_file_content_for_processing is not None:
-        logger.debug("Switched to 'Upload New File...'. Clearing current file content for processing.")
-        st.session_state.current_file_content_for_processing = None
-        st.session_state.processed_data = None
-        st.session_state.uploaded_file_name = None
-        st.session_state.column_mapping_confirmed = False
-        st.session_state.selected_user_file_id = "upload_new" # Reflect the intent
-        st.rerun()
-    else:
-        st.session_state.selected_user_file_id = "upload_new"
-
-
-# File Uploader - only active if "Upload New File..." is chosen
 if selected_file_id_from_sidebar_dropdown == "upload_new":
     newly_uploaded_file_object = st.sidebar.file_uploader(
         "Upload New Trading Journal (CSV)", type=["csv"], key="app_wide_file_uploader_auth_v4_trigger",
@@ -327,12 +306,17 @@ if selected_file_id_from_sidebar_dropdown == "upload_new":
         if st.session_state.get('last_uploaded_raw_file_id_tracker') != current_raw_file_id:
             st.session_state.pending_file_to_save_content = newly_uploaded_file_object.getvalue()
             st.session_state.pending_file_to_save_name = newly_uploaded_file_object.name
-            st.session_state.trigger_file_save = True
+            st.session_state.trigger_file_save_processing = True # Use new trigger name
             st.session_state.last_uploaded_raw_file_id_tracker = current_raw_file_id
-            logger.debug(f"New file '{newly_uploaded_file_object.name}' detected. Setting trigger_file_save.")
-            st.rerun()
+            logger.debug(f"New file '{newly_uploaded_file_object.name}' detected. Setting trigger_file_save_processing.")
+            st.rerun() 
+elif selected_file_id_from_sidebar_dropdown is not None and \
+     st.session_state.selected_user_file_id != selected_file_id_from_sidebar_dropdown:
+    # User selected a different existing file from dropdown
+    st.session_state.trigger_file_load_id = selected_file_id_from_sidebar_dropdown
+    logger.debug(f"User selected existing file ID {selected_file_id_from_sidebar_dropdown}. Setting trigger_file_load_id.")
+    st.rerun()
 
-# Delete selected file functionality (for existing files)
 if selected_file_id_from_sidebar_dropdown != "upload_new" and selected_file_id_from_sidebar_dropdown is not None:
     if st.sidebar.button(f"🗑️ Delete '{selected_file_label_in_sidebar.split(' (Uploaded:')[0]}'", key=f"delete_file_{selected_file_id_from_sidebar_dropdown}_v3"):
         if data_service.delete_user_file(selected_file_id_from_sidebar_dropdown, current_user_id, permanent_delete_local_file=True):
@@ -364,7 +348,6 @@ if current_sidebar_filters:
 active_file_content_to_process = st.session_state.get('current_file_content_for_processing')
 active_file_name_for_processing = st.session_state.get('uploaded_file_name')
 active_processing_file_identifier = st.session_state.selected_user_file_id if (st.session_state.selected_user_file_id and st.session_state.selected_user_file_id != "upload_new") else active_file_name_for_processing
-
 
 @log_execution_time
 def get_and_process_data_with_profiling(file_obj, mapping, name):
@@ -400,7 +383,6 @@ if active_file_content_to_process and active_file_name_for_processing:
         else: st.stop()
     if st.session_state.column_mapping_confirmed and st.session_state.user_column_mapping:
         if st.session_state.last_processed_file_id != active_processing_file_identifier or st.session_state.processed_data is None:
-            # This spinner is for data processing, not file saving
             with st.spinner(f"Processing '{active_file_name_for_processing}'..."): 
                 active_file_content_to_process.seek(0)
                 st.session_state.processed_data = get_and_process_data_with_profiling(active_file_content_to_process, st.session_state.user_column_mapping, active_file_name_for_processing)
@@ -418,7 +400,7 @@ elif not active_file_content_to_process and st.session_state.authenticated_user:
             if key_val in st.session_state: st.session_state[key_val] = None
 
 # --- Data Filtering, Benchmark Fetching, KPI Calculation (as before) ---
-# ... (This entire section remains the same as it operates on st.session_state.processed_data / filtered_data) ...
+# ... (This entire section remains the same) ...
 @log_execution_time
 def filter_data_with_profiling(df, filters, col_map): return data_service.filter_data(df, filters, col_map)
 
@@ -507,7 +489,8 @@ def main_page_layout():
     st.markdown("<br><div style='text-align: center; margin-top: 30px;'>", unsafe_allow_html=True)
     user_guide_page_path = "pages/0_❓_User_Guide.py"
     if os.path.exists(user_guide_page_path):
-        if st.button("📘 Read User Guide", key="welcome_guide_btn_auth_v2"): st.switch_page(user_guide_page_path)
+        if st.button("📘 Read User Guide", key="welcome_guide_btn_auth_v3"): # Incremented key
+             st.switch_page(user_guide_page_path)
     else: st.markdown("<p>User guide not found.</p>", unsafe_allow_html=True); logger.warning(f"User Guide not found: {user_guide_page_path}")
     st.markdown("</div></div>", unsafe_allow_html=True)
 
@@ -517,4 +500,3 @@ if not active_file_content_to_process and not (st.session_state.get('column_mapp
 scroll_buttons_component = ScrollButtons()
 scroll_buttons_component.render()
 logger.info(f"App run cycle finished for user '{current_username}'.")
-
