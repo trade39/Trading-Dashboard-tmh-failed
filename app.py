@@ -102,6 +102,7 @@ if 'pending_file_to_save_content' not in st.session_state: st.session_state.pend
 if 'pending_file_to_save_name' not in st.session_state: st.session_state.pending_file_to_save_name = None
 if 'trigger_file_save' not in st.session_state: st.session_state.trigger_file_save = False
 if 'last_uploaded_raw_file_id_tracker' not in st.session_state: st.session_state.last_uploaded_raw_file_id_tracker = None
+if 'trigger_file_load_id' not in st.session_state: st.session_state.trigger_file_load_id = None # New: ID of file to load
 
 
 def display_login_form():
@@ -110,7 +111,7 @@ def display_login_form():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
         auth_area_container = st.container(border=True) 
         with auth_area_container:
-            with st.form("login_form_main_v2"):  # Ensure unique form key
+            with st.form("login_form_main_v2"):
                 st.markdown(f"<h2 style='text-align: center;'>Login to {APP_TITLE}</h2>", unsafe_allow_html=True)
                 username = st.text_input("Username", key="login_username_main_v2")
                 password = st.text_input("Password", type="password", key="login_password_main_v2")
@@ -135,7 +136,7 @@ def display_registration_form():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
         auth_area_container = st.container(border=True)
         with auth_area_container:
-            with st.form("registration_form_main_v2"): # Ensure unique form key
+            with st.form("registration_form_main_v2"): 
                 st.markdown(f"<h2 style='text-align: center;'>Register for {APP_TITLE}</h2>", unsafe_allow_html=True)
                 reg_username = st.text_input("Username", key="reg_username_main_v2")
                 reg_email = st.text_input("Email (Optional)", key="reg_email_main_v2")
@@ -173,17 +174,14 @@ if st.session_state.get('trigger_file_save') and st.session_state.get('pending_f
     file_content_to_save_bytes = st.session_state.pending_file_to_save_content
     original_name_to_save = st.session_state.pending_file_to_save_name
     
-    # Clear the pending save flags immediately
     st.session_state.trigger_file_save = False
     st.session_state.pending_file_to_save_content = None
     st.session_state.pending_file_to_save_name = None
 
-    # Create a temporary UploadedFile-like object for the service
     temp_uploaded_file_for_service = BytesIO(file_content_to_save_bytes)
     temp_uploaded_file_for_service.name = original_name_to_save 
 
-    # Use spinner in the main area
-    with st.spinner(f"Saving '{original_name_to_save}' to your account... Please wait."):
+    with st.spinner(f"Saving '{original_name_to_save}' to your account... Please wait."): # Spinner in main area
         saved_user_file_record = data_service.save_user_file(current_user_id, temp_uploaded_file_for_service)
         if saved_user_file_record:
             st.success(f"File '{saved_user_file_record.original_file_name}' saved successfully!")
@@ -196,9 +194,39 @@ if st.session_state.get('trigger_file_save') and st.session_state.get('pending_f
             st.rerun() 
         else:
             st.error(f"Could not save the file '{original_name_to_save}'. Please try uploading again.")
-    # The script will continue after the spinner if rerun isn't hit due to an error above.
+
+# --- Process Pending File Load (New Logic) ---
+if st.session_state.get('trigger_file_load_id') is not None:
+    file_id_to_load = st.session_state.trigger_file_load_id
+    st.session_state.trigger_file_load_id = None # Clear the trigger
+
+    user_files_for_load_check = data_service.list_user_files(current_user_id) # Fetch fresh list
+    selected_file_record_for_load = next((f for f in user_files_for_load_check if f.id == file_id_to_load), None)
+    
+    if selected_file_record_for_load:
+        with st.spinner(f"Loading '{selected_file_record_for_load.original_file_name}'... Please wait."): # Spinner in main area
+            file_content_bytesio = data_service.get_user_file_content(file_id_to_load, current_user_id)
+            if file_content_bytesio:
+                st.session_state.current_file_content_for_processing = file_content_bytesio
+                st.session_state.selected_user_file_id = file_id_to_load
+                st.session_state.uploaded_file_name = selected_file_record_for_load.original_file_name
+                st.session_state.processed_data = None 
+                st.session_state.column_mapping_confirmed = False 
+                st.sidebar.info(f"Loaded '{st.session_state.uploaded_file_name}' for analysis.") # Message in sidebar
+                logger.info(f"File ID {file_id_to_load} loaded for user {current_user_id}. Triggering rerun for processing.")
+                st.rerun()
+            else:
+                st.error(f"Could not load the content for file: {selected_file_record_for_load.original_file_name}.")
+                st.session_state.current_file_content_for_processing = None
+                st.session_state.selected_user_file_id = None # Deselect if loading failed
+    else:
+        st.error(f"Selected file (ID: {file_id_to_load}) not found or access denied.")
+        st.session_state.selected_user_file_id = None
+
 
 # --- Initialize Main App Session State (if not already done) ---
+default_session_state_main_app = { /* ... as before ... */ }
+# ... (session state initialization as before) ...
 default_session_state_main_app = {
     'app_initialized': True, 'processed_data': None, 'filtered_data': None,
     'kpi_results': None, 'kpi_confidence_intervals': {},
@@ -218,10 +246,11 @@ default_session_state_main_app['selected_benchmark_display_name'] = next(
 for key, value in default_session_state_main_app.items():
     if key not in st.session_state: st.session_state[key] = value
 
+
 # --- Sidebar for Authenticated User ---
 LOGO_PATH_SIDEBAR = "assets/Trading_Mastery_Hub_600x600.png"
-# ... (logo rendering as before) ...
 logo_base64 = None
+# ... (logo rendering as before) ...
 if os.path.exists(LOGO_PATH_SIDEBAR):
     try:
         with open(LOGO_PATH_SIDEBAR, "rb") as image_file: logo_base64 = base64.b64encode(image_file.read()).decode()
@@ -247,60 +276,68 @@ if st.sidebar.button(toggle_label, key="theme_toggle_button_main_app_auth_v4", u
 st.sidebar.markdown("---")
 
 st.sidebar.subheader("📁 Your Trading Journals")
-user_files = data_service.list_user_files(current_user_id)
+user_files = data_service.list_user_files(current_user_id) # Fetch fresh list for display
 file_options = {f"{f.original_file_name} (Uploaded: {f.upload_timestamp.strftime('%Y-%m-%d %H:%M')})": f.id for f in user_files}
 file_options["✨ Upload New File..."] = "upload_new"
 
+# Determine default for selectbox based on current processing state or last selection
 default_file_selection_label = "✨ Upload New File..."
-if st.session_state.selected_user_file_id and st.session_state.selected_user_file_id in file_options.values():
+if st.session_state.selected_user_file_id and st.session_state.selected_user_file_id != "upload_new" and st.session_state.selected_user_file_id in file_options.values():
     default_file_selection_label = next((label for label, id_val in file_options.items() if id_val == st.session_state.selected_user_file_id), "✨ Upload New File...")
 
-selected_file_label = st.sidebar.selectbox(
+selected_file_label_in_sidebar = st.sidebar.selectbox(
     "Select a journal or upload new:", options=list(file_options.keys()),
     index=list(file_options.keys()).index(default_file_selection_label),
     key="select_user_file_v4" # Incremented key
 )
-selected_file_id_from_dropdown = file_options.get(selected_file_label)
+selected_file_id_from_sidebar_dropdown = file_options.get(selected_file_label_in_sidebar)
 
-if selected_file_id_from_dropdown == "upload_new":
+
+# Handle selection change from dropdown for EXISTING files
+if selected_file_id_from_sidebar_dropdown != "upload_new" and \
+   selected_file_id_from_sidebar_dropdown is not None and \
+   st.session_state.selected_user_file_id != selected_file_id_from_sidebar_dropdown:
+    # User selected a different existing file
+    st.session_state.trigger_file_load_id = selected_file_id_from_sidebar_dropdown
+    logger.debug(f"User selected existing file ID {selected_file_id_from_sidebar_dropdown} from dropdown. Setting trigger_file_load_id.")
+    st.rerun()
+elif selected_file_id_from_sidebar_dropdown == "upload_new" and st.session_state.selected_user_file_id != "upload_new":
+    # User switched from an existing file to "Upload New File..."
+    # Clear current processing if a file was active, to make way for uploader
+    if st.session_state.current_file_content_for_processing is not None:
+        logger.debug("Switched to 'Upload New File...'. Clearing current file content for processing.")
+        st.session_state.current_file_content_for_processing = None
+        st.session_state.processed_data = None
+        st.session_state.uploaded_file_name = None
+        st.session_state.column_mapping_confirmed = False
+        st.session_state.selected_user_file_id = "upload_new" # Reflect the intent
+        st.rerun()
+    else:
+        st.session_state.selected_user_file_id = "upload_new"
+
+
+# File Uploader - only active if "Upload New File..." is chosen
+if selected_file_id_from_sidebar_dropdown == "upload_new":
     newly_uploaded_file_object = st.sidebar.file_uploader(
-        "Upload New Trading Journal (CSV)", type=["csv"], key="app_wide_file_uploader_auth_v4_trigger", # Incremented key
+        "Upload New Trading Journal (CSV)", type=["csv"], key="app_wide_file_uploader_auth_v4_trigger",
         help="Your uploaded CSV will be saved to your account."
     )
     if newly_uploaded_file_object is not None:
-        # Check if this is genuinely a new file upload instance
         current_raw_file_id = id(newly_uploaded_file_object)
         if st.session_state.get('last_uploaded_raw_file_id_tracker') != current_raw_file_id:
             st.session_state.pending_file_to_save_content = newly_uploaded_file_object.getvalue()
             st.session_state.pending_file_to_save_name = newly_uploaded_file_object.name
             st.session_state.trigger_file_save = True
             st.session_state.last_uploaded_raw_file_id_tracker = current_raw_file_id
-            logger.debug(f"New file '{newly_uploaded_file_object.name}' detected in uploader. Setting trigger_file_save.")
-            st.rerun() # Rerun to initiate the save process outside this callback
+            logger.debug(f"New file '{newly_uploaded_file_object.name}' detected. Setting trigger_file_save.")
+            st.rerun()
 
-if selected_file_id_from_dropdown != "upload_new" and selected_file_id_from_dropdown is not None:
-    if st.session_state.selected_user_file_id != selected_file_id_from_dropdown or st.session_state.current_file_content_for_processing is None:
-        with st.sidebar.spinner("Loading selected file..."): # Spinner for loading existing file
-            file_content_bytesio = data_service.get_user_file_content(selected_file_id_from_dropdown, current_user_id)
-            if file_content_bytesio:
-                st.session_state.current_file_content_for_processing = file_content_bytesio
-                st.session_state.selected_user_file_id = selected_file_id_from_dropdown
-                selected_file_record = next((f for f in user_files if f.id == selected_file_id_from_dropdown), None)
-                st.session_state.uploaded_file_name = selected_file_record.original_file_name if selected_file_record else "Selected File"
-                st.session_state.processed_data = None 
-                st.session_state.column_mapping_confirmed = False 
-                st.sidebar.info(f"Loaded '{st.session_state.uploaded_file_name}' for analysis.")
-                st.rerun()
-            else:
-                st.sidebar.error("Could not load the selected file.")
-                st.session_state.current_file_content_for_processing = None
-                st.session_state.selected_user_file_id = None
-
-if selected_file_id_from_dropdown != "upload_new" and selected_file_id_from_dropdown is not None:
-    if st.sidebar.button(f"🗑️ Delete '{selected_file_label.split(' (Uploaded:')[0]}'", key=f"delete_file_{selected_file_id_from_dropdown}_v3"): # Incremented key
-        if data_service.delete_user_file(selected_file_id_from_dropdown, current_user_id, permanent_delete_local_file=True):
-            st.sidebar.success(f"File '{selected_file_label}' marked as deleted.")
-            if st.session_state.selected_user_file_id == selected_file_id_from_dropdown:
+# Delete selected file functionality (for existing files)
+if selected_file_id_from_sidebar_dropdown != "upload_new" and selected_file_id_from_sidebar_dropdown is not None:
+    if st.sidebar.button(f"🗑️ Delete '{selected_file_label_in_sidebar.split(' (Uploaded:')[0]}'", key=f"delete_file_{selected_file_id_from_sidebar_dropdown}_v3"):
+        if data_service.delete_user_file(selected_file_id_from_sidebar_dropdown, current_user_id, permanent_delete_local_file=True):
+            st.sidebar.success(f"File '{selected_file_label_in_sidebar}' marked as deleted.")
+            if st.session_state.selected_user_file_id == selected_file_id_from_sidebar_dropdown:
                 st.session_state.selected_user_file_id = None; st.session_state.current_file_content_for_processing = None
                 st.session_state.processed_data = None; st.session_state.uploaded_file_name = None
                 st.session_state.column_mapping_confirmed = False
@@ -326,7 +363,8 @@ if current_sidebar_filters:
 # --- Data Processing Pipeline ---
 active_file_content_to_process = st.session_state.get('current_file_content_for_processing')
 active_file_name_for_processing = st.session_state.get('uploaded_file_name')
-active_processing_file_identifier = st.session_state.selected_user_file_id if st.session_state.selected_user_file_id else active_file_name_for_processing
+active_processing_file_identifier = st.session_state.selected_user_file_id if (st.session_state.selected_user_file_id and st.session_state.selected_user_file_id != "upload_new") else active_file_name_for_processing
+
 
 @log_execution_time
 def get_and_process_data_with_profiling(file_obj, mapping, name):
@@ -454,7 +492,9 @@ elif st.session_state.filtered_data is not None and st.session_state.filtered_da
     if st.session_state.processed_data is not None and not st.session_state.processed_data.empty: display_custom_message("No data matches filters.", "info")
     st.session_state.kpi_results = None; st.session_state.kpi_confidence_intervals = {}; st.session_state.max_drawdown_period_details = None
 
+# --- Welcome Page / Main Content Display Logic ---
 def main_page_layout():
+    # ... (implementation as before) ...
     st.markdown("<div class='welcome-container'>", unsafe_allow_html=True)
     st.markdown("<div class='hero-section'><h1 class='welcome-title'>Trading Dashboard</h1>", unsafe_allow_html=True)
     st.markdown(f"<p class='welcome-subtitle'>Powered by {PAGE_CONFIG_APP_TITLE}</p></div>", unsafe_allow_html=True)
