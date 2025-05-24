@@ -4,7 +4,7 @@ Centralized database setup: engine, SessionLocal, Base, and table creation.
 """
 import logging
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base, Session # <<< ADDED Session IMPORT
+from sqlalchemy.orm import sessionmaker, declarative_base, Session # <<< ENSURE THIS IMPORT IS PRESENT
 import streamlit as st 
 
 try:
@@ -33,8 +33,6 @@ except Exception as e_db_core_setup:
 def get_db_session() -> Optional[Session]: # <<< Session type hint is now valid
     """
     Provides a database session.
-    For Streamlit, it's often recommended to create a new session per request/interaction
-    and ensure it's closed. Caching SessionLocal (the factory) is good.
     """
     if not SessionLocal:
         logger.error("SessionLocal is not initialized. Cannot create DB session.")
@@ -77,3 +75,4 @@ def create_db_tables():
         logger.error("Database engine or Base not initialized. Cannot create tables.")
         if 'st' in globals() and hasattr(st, 'error'):
             st.error("Database connection components (engine/Base) failed to initialize. Database features will not work.")
+
