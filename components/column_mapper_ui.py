@@ -7,6 +7,7 @@ from io import BytesIO
 from thefuzz import fuzz
 import re
 import chardet
+import os # Added for os.SEEK_END
 
 try:
     from config import (
@@ -29,25 +30,27 @@ class ColumnMapperUI:
     def __init__(
         self,
         uploaded_file_name: str,
-        uploaded_file_bytes: Optional[BytesIO], # This is the full BytesIO object
-        csv_headers: List[str], # Headers already extracted by app.py
+        uploaded_file_bytes: Optional[BytesIO],
+        csv_headers: List[str],
         conceptual_columns_map: Dict[str, str],
         conceptual_column_types: Dict[str, str],
         conceptual_column_synonyms: Dict[str, List[str]],
         critical_conceptual_cols: List[str],
         conceptual_column_categories: TypingOrderedDict[str, List[str]],
-        initial_mapping_override: Optional[Dict[str, Optional[str]]] = None
+        initial_mapping_override: Optional[Dict[str, Optional[str]]] = None,
+        detected_encoding: Optional[str] = None # NEW: Accept detected encoding
     ):
         self.uploaded_file_name = uploaded_file_name
-        self.uploaded_file_bytes_for_preview = uploaded_file_bytes # Store for preview
+        self.uploaded_file_bytes_for_preview = uploaded_file_bytes
         self.csv_headers_for_select = [""] + csv_headers
-        self.raw_csv_headers_for_preview_matching = csv_headers # Actual headers from file
+        self.raw_csv_headers_for_preview_matching = csv_headers
         self.conceptual_columns_map = conceptual_columns_map
         self.conceptual_column_types = conceptual_column_types
         self.conceptual_column_synonyms = conceptual_column_synonyms
         self.critical_conceptual_cols = critical_conceptual_cols if critical_conceptual_cols else []
         self.conceptual_column_categories = conceptual_column_categories
         self.initial_mapping_override = initial_mapping_override
+        self.passed_detected_encoding = detected_encoding # Store passed encoding
         self.mapping: Dict[str, Optional[str]] = {}
         self.preview_df: Optional[pd.DataFrame] = None
 
@@ -57,7 +60,6 @@ class ColumnMapperUI:
                     self.uploaded_file_bytes_for_preview.seek(0)
                     sample_limit_bytes = 50 * 1024  # 50KB
                     
-                    # Determine actual bytes to read for preview sample
                     actual_buffer_size = 0
                     if hasattr(self.uploaded_file_bytes_for_preview, 'getbuffer'):
                         actual_buffer_size = self.uploaded_file_bytes_for_preview.getbuffer().nbytes
@@ -65,43 +67,68 @@ class ColumnMapperUI:
                         current_pos = self.uploaded_file_bytes_for_preview.tell()
                         self.uploaded_file_bytes_for_preview.seek(0, os.SEEK_END)
                         actual_buffer_size = self.uploaded_file_bytes_for_preview.tell()
-                        self.uploaded_file_bytes_for_preview.seek(current_pos) # Restore position
+                        self.uploaded_file_bytes_for_preview.seek(current_pos) 
                     
                     bytes_to_read_for_preview = min(actual_buffer_size, sample_limit_bytes) if actual_buffer_size > 0 else sample_limit_bytes
-
                     preview_sample_bytes = self.uploaded_file_bytes_for_preview.read(bytes_to_read_for_preview)
-                    self.uploaded_file_bytes_for_preview.seek(0) # IMPORTANT: Reset for app.py if it needs to re-read full
+                    self.uploaded_file_bytes_for_preview.seek(0) 
 
                     preview_io = BytesIO(preview_sample_bytes)
-                    detected_encoding = 'utf-8' # Default
+                    
+                    primary_encoding_to_try = self.passed_detected_encoding if self.passed_detected_encoding else 'utf-8'
+                    fallback_encodings = ['latin1', 'cp1252']
+                    
+                    read_successful = False
+                    # Try with passed/default encoding first
                     try:
-                        # Attempt with utf-8 first
-                        self.preview_df = pd.read_csv(preview_io, nrows=5, engine='python', skipinitialspace=True, encoding=detected_encoding)
-                        logger.info(f"ColumnMapperUI preview: Successfully read with {detected_encoding}.")
-                    except (UnicodeDecodeError, pd.errors.ParserError) as e_utf8:
-                        logger.warning(f"ColumnMapperUI preview: UTF-8 failed ({e_utf8}). Trying chardet.")
-                        preview_io.seek(0) # Reset for chardet
-                        # Ensure preview_sample_bytes is not empty for chardet
-                        if not preview_sample_bytes:
-                             logger.error("ColumnMapperUI preview: Sample bytes for chardet are empty.")
-                             self.preview_df = None
-                        else:
-                            detected = chardet.detect(preview_sample_bytes)
-                            detected_encoding = detected.get('encoding', 'latin1') # Fallback to latin1
-                            confidence = detected.get('confidence', 0.0)
-                            logger.info(f"ColumnMapperUI preview: Encoding for sample detected as {detected_encoding} with confidence {confidence:.2f}.")
-                            preview_io.seek(0)
+                        logger.info(f"ColumnMapperUI preview: Attempting to read with primary encoding: {primary_encoding_to_try}")
+                        self.preview_df = pd.read_csv(preview_io, nrows=5, engine='python', skipinitialspace=True, encoding=primary_encoding_to_try)
+                        logger.info(f"ColumnMapperUI preview: Successfully read with {primary_encoding_to_try}.")
+                        read_successful = True
+                    except (UnicodeDecodeError, pd.errors.ParserError) as e_primary:
+                        logger.warning(f"ColumnMapperUI preview: Primary encoding '{primary_encoding_to_try}' failed ({e_primary}).")
+                        preview_io.seek(0) # Reset for next attempt
+
+                    # Try fallback encodings if primary failed
+                    if not read_successful:
+                        for enc in fallback_encodings:
                             try:
-                                self.preview_df = pd.read_csv(preview_io, nrows=5, encoding=detected_encoding, engine='python', skipinitialspace=True)
-                            except Exception as e_chardet_read:
-                                logger.error(f"ColumnMapperUI preview: Failed to read with chardet encoding {detected_encoding}: {e_chardet_read}", exc_info=True)
-                                self.preview_df = None # Set to None on failure
-                    except pd.errors.EmptyDataError:
-                        logger.warning(f"ColumnMapperUI preview: CSV for '{self.uploaded_file_name}' appears empty or has no data in the first 5 rows.")
-                        self.preview_df = pd.DataFrame(columns=self.raw_csv_headers_for_preview_matching) # Empty df with headers
-                    except Exception as e_preview_read:
-                        logger.error(f"ColumnMapperUI preview: Generic error reading CSV ('{self.uploaded_file_name}'): {e_preview_read}", exc_info=True)
-                        self.preview_df = None
+                                logger.info(f"ColumnMapperUI preview: Trying fallback encoding: {enc}")
+                                self.preview_df = pd.read_csv(preview_io, nrows=5, engine='python', skipinitialspace=True, encoding=enc)
+                                logger.info(f"ColumnMapperUI preview: Successfully read with fallback encoding {enc}.")
+                                read_successful = True
+                                break 
+                            except (UnicodeDecodeError, pd.errors.ParserError):
+                                logger.warning(f"ColumnMapperUI preview: Fallback encoding '{enc}' failed.")
+                                preview_io.seek(0)
+                    
+                    # If all attempts fail, then try chardet as a last resort
+                    if not read_successful and preview_sample_bytes:
+                        logger.warning("ColumnMapperUI preview: All direct encoding attempts failed. Trying chardet as a last resort.")
+                        preview_io.seek(0)
+                        try:
+                            detected_chardet_info = chardet.detect(preview_sample_bytes)
+                            chardet_encoding = detected_chardet_info.get('encoding')
+                            chardet_confidence = detected_chardet_info.get('confidence', 0.0)
+                            logger.info(f"ColumnMapperUI preview (chardet fallback): Detected encoding {chardet_encoding} with confidence {chardet_confidence:.2f}.")
+                            if chardet_encoding and chardet_confidence > 0.3: # Lower confidence threshold for fallback
+                                preview_io.seek(0)
+                                self.preview_df = pd.read_csv(preview_io, nrows=5, encoding=chardet_encoding, engine='python', skipinitialspace=True)
+                                logger.info(f"ColumnMapperUI preview: Successfully read with chardet encoding {chardet_encoding}.")
+                                read_successful = True
+                            else:
+                                logger.warning("ColumnMapperUI preview (chardet fallback): Low confidence or no encoding detected by chardet.")
+                        except Exception as e_chardet_read:
+                            logger.error(f"ColumnMapperUI preview (chardet fallback): Failed to read with chardet encoding: {e_chardet_read}", exc_info=True)
+                    
+                    if not read_successful:
+                         logger.error(f"ColumnMapperUI preview: All encoding attempts failed for '{self.uploaded_file_name}'. Preview will be empty or None.")
+                         self.preview_df = pd.DataFrame(columns=self.raw_csv_headers_for_preview_matching) if self.raw_csv_headers_for_preview_matching else None
+
+
+            except pd.errors.EmptyDataError:
+                logger.warning(f"ColumnMapperUI preview: CSV for '{self.uploaded_file_name}' appears empty or has no data in the first 5 rows.")
+                self.preview_df = pd.DataFrame(columns=self.raw_csv_headers_for_preview_matching)
             except Exception as e_outer_preview:
                  logger.error(f"ColumnMapperUI: Outer error during preview generation ('{self.uploaded_file_name}'): {e_outer_preview}", exc_info=True)
                  self.preview_df = None
