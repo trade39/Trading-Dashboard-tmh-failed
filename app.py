@@ -16,7 +16,8 @@ try:
         CONCEPTUAL_COLUMN_TYPES, CONCEPTUAL_COLUMN_SYNONYMS,
         CONCEPTUAL_COLUMN_CATEGORIES,
         RISK_FREE_RATE, LOG_FILE, LOG_LEVEL, LOG_FORMAT,
-        DEFAULT_BENCHMARK_TICKER, AVAILABLE_BENCHMARKS, EXPECTED_COLUMNS
+        DEFAULT_BENCHMARK_TICKER, AVAILABLE_BENCHMARKS, EXPECTED_COLUMNS,
+        APP_BASE_URL # Added for reset link construction (though service uses it)
     )
     from kpi_definitions import KPI_CONFIG
     from utils.logger import setup_logger
@@ -24,15 +25,14 @@ try:
     from components.sidebar_manager import SidebarManager
     from components.column_mapper_ui import ColumnMapperUI
     from components.scroll_buttons import ScrollButtons
-
     from services import (
-        DataService, AnalysisService, AuthService, # Ensure AuthService is imported
+        DataService, AnalysisService, AuthService,
         create_db_tables, get_benchmark_data_static
     )
 except ImportError as e:
-    st.error(f"Fatal Error: A critical module could not be imported. App cannot start. Details: {e}")
+    st.error(f"Fatal Error: Critical module import failed: {e}. App cannot start.")
     logging.basicConfig(level=logging.ERROR); logging.error(f"Fatal Error: {e}", exc_info=True)
-    APP_TITLE="TradingAppError"; RISK_FREE_RATE=0.02; DEFAULT_BENCHMARK_TICKER="SPY"; AVAILABLE_BENCHMARKS={"None":""}
+    APP_TITLE="TradingAppError"; RISK_FREE_RATE=0.02; DEFAULT_BENCHMARK_TICKER="SPY"; AVAILABLE_BENCHMARKS={"None":""}; APP_BASE_URL=""
     class DataService: pass; class AnalysisService: pass; class AuthService: pass;
     def create_db_tables(): pass; def get_benchmark_data_static(*args, **kwargs): return None
     class SidebarManager: def __init__(self,*args): pass; def render_sidebar_controls(self): return {}
@@ -41,7 +41,6 @@ except ImportError as e:
     def load_css(f): pass; def display_custom_message(m,t): st.error(m); def setup_logger(**kwargs): return logging.getLogger(APP_TITLE)
     st.stop()
 
-# --- Page Config, Logger, Services, DB Init (as before) ---
 PAGE_CONFIG_APP_TITLE = APP_TITLE
 LOGO_PATH_FOR_BROWSER_TAB = "assets/Trading_Mastery_Hub_600x600.png"
 st.set_page_config(page_title=PAGE_CONFIG_APP_TITLE, page_icon=LOGO_PATH_FOR_BROWSER_TAB, layout="wide", initial_sidebar_state="expanded", menu_items={})
@@ -51,26 +50,38 @@ data_service = DataService(); analysis_service_instance = AnalysisService(); aut
 try: create_db_tables(); logger.info("DB tables checked/created.")
 except Exception as e: logger.critical(f"Failed to init DB tables: {e}", exc_info=True); st.error(f"DB Init Error: {e}.")
 
-# --- Theme Management & CSS (as before) ---
 if 'user_preferences' not in st.session_state: st.session_state.user_preferences = {}
 effective_theme = st.session_state.user_preferences.get('default_theme', st.session_state.get('current_theme', 'dark'))
 if 'current_theme' not in st.session_state or st.session_state.current_theme != effective_theme:
     st.session_state.current_theme = effective_theme
-theme_js = f"""<script>/* Theme JS as before */
-    const currentTheme = '{st.session_state.current_theme}'; document.documentElement.setAttribute('data-theme', currentTheme);
+theme_js = f"""<script> const currentTheme = '{st.session_state.current_theme}'; document.documentElement.setAttribute('data-theme', currentTheme);
     if (currentTheme === "dark") {{ document.body.classList.add('dark-mode'); document.body.classList.remove('light-mode'); }}
-    else {{ document.body.classList.add('light-mode'); document.body.classList.remove('dark-mode'); }}
-</script>"""
+    else {{ document.body.classList.add('light-mode'); document.body.classList.remove('dark-mode'); }} </script>"""
 st.components.v1.html(theme_js, height=0)
-try:
-    css_file_path = "style.css";
+try: css_file_path = "style.css";
     if os.path.exists(css_file_path): load_css(css_file_path)
     else: logger.error(f"style.css not found at '{css_file_path}'.")
 except Exception as e_css: logger.error(f"Failed to load style.css: {e_css}", exc_info=True)
 
-# --- Auth State & Session State Inits (as before) ---
 if 'authenticated_user' not in st.session_state: st.session_state.authenticated_user = None
 if 'auth_flow_page' not in st.session_state: st.session_state.auth_flow_page = 'login'
+# New state for password reset token from URL
+if 'password_reset_token' not in st.session_state: st.session_state.password_reset_token = None
+
+# --- Handle Password Reset Token from URL ---
+query_params = st.query_params # Use new API
+if "page" in query_params and query_params["page"] == "reset_password_form" and "token" in query_params:
+    token_from_url = query_params["token"]
+    if isinstance(token_from_url, list): token_from_url = token_from_url[0] # Take first if multiple
+
+    if token_from_url and st.session_state.auth_flow_page != 'reset_password_form': # Only process if not already on form
+        st.session_state.password_reset_token = token_from_url
+        st.session_state.auth_flow_page = 'reset_password_form'
+        logger.info(f"Password reset token '{token_from_url[:8]}...' received from URL. Switching to reset form.")
+        # Clear query params after processing to prevent reuse on refresh / direct link sharing
+        st.query_params.clear()
+        st.rerun() # Rerun to show the reset form immediately
+
 # ... (other session state inits as before) ...
 if 'selected_user_file_id' not in st.session_state: st.session_state.selected_user_file_id = None
 if 'current_file_content_for_processing' not in st.session_state: st.session_state.current_file_content_for_processing = None
@@ -83,15 +94,14 @@ if 'last_processed_mapping_for_file_id' not in st.session_state: st.session_stat
 
 
 def display_login_form():
-    # ... (implementation as before, including loading user_preferences)
     with st.container():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
         auth_area_container = st.container(border=True)
         with auth_area_container:
-            with st.form("login_form_main_v3"): # Key can remain, form is self-contained
+            with st.form("login_form_main_v3_reset"): # New key
                 st.markdown(f"<h2 style='text-align: center;'>Login to {APP_TITLE}</h2>", unsafe_allow_html=True)
-                username = st.text_input("Username", key="login_username_main_v3")
-                password = st.text_input("Password", type="password", key="login_password_main_v3")
+                username = st.text_input("Username", key="login_username_main_v3_reset")
+                password = st.text_input("Password", type="password", key="login_password_main_v3_reset")
                 submitted = st.form_submit_button("Login", use_container_width=True, type="primary")
                 if submitted:
                     if not username or not password: st.error("Username and password are required.")
@@ -99,35 +109,105 @@ def display_login_form():
                         user = auth_service.authenticate_user(username, password)
                         if user:
                             st.session_state.authenticated_user = {'user_id': user.id, 'username': user.username}
-                            st.session_state.auth_flow_page = None # Clear auth flow page
-                            logger.info(f"User '{username}' logged in successfully.")
+                            st.session_state.auth_flow_page = None
                             user_settings = auth_service.get_user_settings(user.id)
                             if user_settings:
-                                st.session_state.user_preferences = {
-                                    'default_theme': user_settings.default_theme,
-                                    'default_risk_free_rate': user_settings.default_risk_free_rate,
-                                    'default_benchmark_ticker': user_settings.default_benchmark_ticker
-                                }
-                                if st.session_state.current_theme != user_settings.default_theme:
-                                    st.session_state.current_theme = user_settings.default_theme
-                                logger.info(f"Loaded preferences for user {user.id}: {st.session_state.user_preferences}")
-                            else:
-                                st.session_state.user_preferences = {'default_theme': 'dark', 'default_risk_free_rate': RISK_FREE_RATE, 'default_benchmark_ticker': DEFAULT_BENCHMARK_TICKER}
-                                logger.warning(f"No saved preferences for user {user.id}, using app defaults.")
+                                st.session_state.user_preferences = {'default_theme': user_settings.default_theme, 'default_risk_free_rate': user_settings.default_risk_free_rate, 'default_benchmark_ticker': user_settings.default_benchmark_ticker}
+                                if st.session_state.current_theme != user_settings.default_theme: st.session_state.current_theme = user_settings.default_theme
+                            else: st.session_state.user_preferences = {'default_theme': 'dark', 'default_risk_free_rate': RISK_FREE_RATE, 'default_benchmark_ticker': DEFAULT_BENCHMARK_TICKER}
                             st.success(f"Welcome back, {username}!"); st.rerun()
                         else: st.error("Invalid username or password.")
-            if st.button("Don't have an account? Register", use_container_width=True, key="goto_register_btn_main_v4"):
-                st.session_state.auth_flow_page = 'register'; st.rerun()
+            
+            col_auth_links1, col_auth_links2 = st.columns(2)
+            with col_auth_links1:
+                if st.button("Forgot Password?", use_container_width=True, key="forgot_password_link_v1"):
+                    st.session_state.auth_flow_page = 'forgot_password_request'
+                    st.rerun()
+            with col_auth_links2:
+                if st.button("Register New Account", use_container_width=True, key="goto_register_btn_main_v5_reset"): # New key
+                    st.session_state.auth_flow_page = 'register'
+                    st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
 def display_registration_form():
+    # ... (implementation as before, with password complexity info) ...
     with st.container():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
         auth_area_container = st.container(border=True)
         with auth_area_container:
             st.markdown(f"<h2 style='text-align: center;'>Register for {APP_TITLE}</h2>", unsafe_allow_html=True)
+            st.markdown("""<small>Password must: be 8+ chars, include uppercase, lowercase, digit, and special character.</small>""", unsafe_allow_html=True)
+            with st.form("registration_form_main_v4_complexity"):
+                reg_username = st.text_input("Username", key="reg_username_main_v4")
+                reg_email = st.text_input("Email (Required for password reset)", key="reg_email_main_v4") # Emphasize email for reset
+                reg_password = st.text_input("Password", type="password", key="reg_password_main_v4")
+                reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm_main_v4")
+                reg_submitted = st.form_submit_button("Register", use_container_width=True, type="primary")
+                if reg_submitted:
+                    if not reg_username or not reg_password or not reg_password_confirm or not reg_email: # Email now required for reset
+                        st.error("Username, Email, password, and confirmation are required.")
+                    elif reg_password != reg_password_confirm: st.error("Passwords do not match.")
+                    else:
+                        registration_result = auth_service.register_user(reg_username, reg_password, reg_email)
+                        if registration_result.get("user"):
+                            st.success(f"User '{reg_username}' registered! Please login."); st.session_state.auth_flow_page = 'login'; st.rerun()
+                        else: st.error(registration_result.get("error", "Registration failed."))
+            if st.button("Already have an account? Login", use_container_width=True, key="goto_login_btn_main_v5_complexity"):
+                st.session_state.auth_flow_page = 'login'; st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+def display_forgot_password_request_form():
+    with st.container():
+        st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
+        auth_area_container = st.container(border=True)
+        with auth_area_container:
+            st.markdown(f"<h2 style='text-align: center;'>Forgot Password</h2>", unsafe_allow_html=True)
+            st.write("Enter your email address below. If an account exists for this email, we will send instructions to reset your password.")
+            with st.form("forgot_password_request_form_v1"):
+                email_input = st.text_input("Your Email Address", key="forgot_pw_email_v1")
+                submit_request = st.form_submit_button("Send Reset Link", use_container_width=True, type="primary")
+
+                if submit_request:
+                    if not email_input:
+                        st.error("Please enter your email address.")
+                    else:
+                        with st.spinner("Processing request..."):
+                            result = auth_service.create_password_reset_token(email_input)
+                        if result.get("success"):
+                            st.success(result["success"]) # Generic success message
+                        else:
+                            st.error(result.get("error", "Could not process request. Please try again."))
+            if st.button("Back to Login", use_container_width=True, key="forgot_pw_back_to_login_v1"):
+                st.session_state.auth_flow_page = 'login'
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+def display_reset_password_form():
+    with st.container():
+        st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
+        auth_area_container = st.container(border=True)
+        with auth_area_container:
+            st.markdown(f"<h2 style='text-align: center;'>Reset Your Password</h2>", unsafe_allow_html=True)
+            token = st.session_state.get('password_reset_token')
+
+            if not token:
+                st.error("No reset token found or token is invalid. Please request a new password reset link.")
+                if st.button("Request New Reset Link", use_container_width=True, key="reset_form_req_new_link_v1"):
+                    st.session_state.auth_flow_page = 'forgot_password_request'
+                    st.session_state.password_reset_token = None # Clear any invalid token
+                    st.rerun()
+                st.markdown("</div></div>", unsafe_allow_html=True); return
+
+            # Verify token (optional: could be done once on load, or also before form submit)
+            # For simplicity, we'll primarily rely on the submit action to verify and reset.
+            # A pre-check could be:
+            # if not auth_service.verify_password_reset_token(token):
+            #     st.error("This password reset link is invalid or has expired. Please request a new one.")
+            #     # ... button to request new link ...
+            #     return
+
             st.markdown("""
-            <small>Password must meet the following criteria:
+            <small>New password must meet the following criteria:
             <ul>
                 <li>At least 8 characters long</li>
                 <li>At least one uppercase letter (A-Z)</li>
@@ -137,49 +217,67 @@ def display_registration_form():
             </ul></small>
             """, unsafe_allow_html=True)
 
-            with st.form("registration_form_main_v4_complexity"): # New key for new form structure
-                reg_username = st.text_input("Username", key="reg_username_main_v4")
-                reg_email = st.text_input("Email (Optional)", key="reg_email_main_v4")
-                reg_password = st.text_input("Password", type="password", key="reg_password_main_v4")
-                reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm_main_v4")
-                reg_submitted = st.form_submit_button("Register", use_container_width=True, type="primary")
+            with st.form("reset_password_form_v1"):
+                new_password = st.text_input("New Password", type="password", key="reset_pw_new_v1")
+                confirm_new_password = st.text_input("Confirm New Password", type="password", key="reset_pw_confirm_v1")
+                submit_reset = st.form_submit_button("Reset Password", use_container_width=True, type="primary")
 
-                if reg_submitted:
-                    if not reg_username or not reg_password or not reg_password_confirm:
-                        st.error("Username, password, and confirmation are required.")
-                    elif reg_password != reg_password_confirm:
-                        st.error("Passwords do not match.")
+                if submit_reset:
+                    if not new_password or not confirm_new_password:
+                        st.error("Please enter and confirm your new password.")
+                    elif new_password != confirm_new_password:
+                        st.error("New passwords do not match.")
                     else:
-                        # AuthService.register_user now returns a dict with 'user' or 'error'
-                        registration_result = auth_service.register_user(
-                            reg_username, reg_password, reg_email if reg_email else None
-                        )
-                        if registration_result.get("user"):
-                            st.success(f"User '{reg_username}' registered successfully! Default settings applied. Please login.")
+                        with st.spinner("Resetting password..."):
+                            result = auth_service.reset_password_with_token(token, new_password)
+                        
+                        if result.get("success"):
+                            st.success(result["success"])
+                            st.info("You can now log in with your new password.")
                             st.session_state.auth_flow_page = 'login'
-                            st.rerun()
+                            st.session_state.password_reset_token = None # Clear token
+                            if st.button("Go to Login", key="reset_pw_goto_login_success_v1"): st.rerun()
                         else:
-                            # Display specific error from AuthService (e.g., username taken, password complexity)
-                            st.error(registration_result.get("error", "Registration failed due to an unknown server error."))
+                            st.error(result.get("error", "Could not reset password. The link may be invalid or expired."))
             
-            if st.button("Already have an account? Login", use_container_width=True, key="goto_login_btn_main_v5_complexity"): # New key
+            if st.button("Cancel and go to Login", use_container_width=True, type="secondary", key="reset_pw_cancel_v1"):
                 st.session_state.auth_flow_page = 'login'
+                st.session_state.password_reset_token = None
                 st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div></div>", unsafe_allow_html=True)
 
-# --- Auth Flow (as before) ---
+# --- Auth Flow (Updated) ---
 if st.session_state.authenticated_user is None:
-    st.sidebar.empty();
+    st.sidebar.empty()
     if st.session_state.auth_flow_page == 'login': display_login_form()
     elif st.session_state.auth_flow_page == 'register': display_registration_form()
+    elif st.session_state.auth_flow_page == 'forgot_password_request': display_forgot_password_request_form()
+    elif st.session_state.auth_flow_page == 'reset_password_form': display_reset_password_form()
     else: st.session_state.auth_flow_page = 'login'; display_login_form()
     st.stop()
 
+# --- Authenticated App Logic (as before) ---
 current_user_id = st.session_state.authenticated_user['user_id']
 current_username = st.session_state.authenticated_user['username']
+# ... (rest of the app.py, including file processing, sidebar, KPI calculations, main page layout, etc.)
+# This part remains largely unchanged from the "User Settings Persistence" update.
+# Ensure all previous updates are integrated here.
 
-# --- Process Pending File Save/Load (as before) ---
-# ... (No changes needed in these blocks for password complexity) ...
+# (File Save/Load, Session State Init, Sidebar, Data Processing Pipeline, KPI Calc, Main Layout - as before)
+# ... (Copy the entire authenticated part of app.py from the previous "User Settings Persistence" update here) ...
+# For brevity, I'm omitting the repetition of the large authenticated section of app.py.
+# Assume it's identical to the version from the user_scoping_app_py_settings.py immersive.
+# The key changes for password reset are primarily in the authentication flow section above.
+
+# --- Placeholder for the rest of app.py after authentication ---
+# This is where the sidebar rendering, data processing, KPI calculations,
+# and main page layout logic (main_page_layout()) would go.
+# These sections were detailed in the "User Settings Persistence" update.
+# For this specific "Password Reset" update, those sections don't need direct changes
+# beyond ensuring they are correctly placed after the updated authentication flow.
+
+# --- Example of where the rest of the app logic starts ---
+# (Copied from previous version for context, no new changes in this block for password reset)
 if st.session_state.get('trigger_file_save_processing') and st.session_state.get('pending_file_to_save_content') is not None:
     file_content_to_save_bytes = st.session_state.pending_file_to_save_content; original_name_to_save = st.session_state.pending_file_to_save_name
     st.session_state.trigger_file_save_processing = False; st.session_state.pending_file_to_save_content = None; st.session_state.pending_file_to_save_name = None
@@ -194,7 +292,6 @@ if st.session_state.get('trigger_file_save_processing') and st.session_state.get
             st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None; st.session_state.uploaded_file_name = None
             st.session_state.last_processed_mapping_for_file_id = None; logger.info(f"File '{original_name_to_save}' saved for user {current_user_id}. Triggering load."); st.rerun()
         else: status_save.update(label=f"Failed to save '{original_name_to_save}'.", state="error"); st.error(f"Could not save file '{original_name_to_save}'.")
-
 if st.session_state.get('trigger_file_load_id') is not None:
     file_id_to_load = st.session_state.trigger_file_load_id; st.session_state.trigger_file_load_id = None
     user_files = data_service.list_user_files(current_user_id)
@@ -214,10 +311,6 @@ if st.session_state.get('trigger_file_load_id') is not None:
                 st.session_state.current_file_content_for_processing = None
                 if st.session_state.selected_user_file_id == file_id_to_load: st.session_state.selected_user_file_id = None; st.session_state.uploaded_file_name = None
     elif file_id_to_load is not None: st.error(f"File ID {file_id_to_load} not found."); st.session_state.selected_user_file_id = None; st.session_state.current_file_content_for_processing = None; st.session_state.uploaded_file_name = None
-
-
-# --- Initialize Main App Session State (using user prefs for defaults) ---
-# ... (as updated in previous step for user settings persistence) ...
 default_session_state_main_app = {
     'app_initialized': True, 'processed_data': None, 'filtered_data': None, 'kpi_results': None,
     'kpi_confidence_intervals': {}, 'risk_free_rate': st.session_state.user_preferences.get('default_risk_free_rate', RISK_FREE_RATE),
@@ -232,12 +325,7 @@ default_session_state_main_app = {
 default_session_state_main_app['selected_benchmark_display_name'] = next((name for name, ticker_val in AVAILABLE_BENCHMARKS.items() if ticker_val == default_session_state_main_app['selected_benchmark_ticker']), "None")
 for key, value in default_session_state_main_app.items():
     if key not in st.session_state: st.session_state[key] = value
-
-
-# --- Sidebar for Authenticated User (as updated for user settings persistence) ---
-# ... (Logo, Logout, Theme Toggle as before) ...
-LOGO_PATH_SIDEBAR = "assets/Trading_Mastery_Hub_600x600.png"
-logo_base64 = None # Reset for each run
+LOGO_PATH_SIDEBAR = "assets/Trading_Mastery_Hub_600x600.png"; logo_base64 = None
 if os.path.exists(LOGO_PATH_SIDEBAR):
     try:
         with open(LOGO_PATH_SIDEBAR, "rb") as image_file: logo_base64 = base64.b64encode(image_file.read()).decode()
@@ -258,12 +346,10 @@ if st.sidebar.button(toggle_label, key="theme_toggle_button_main_app_auth_v5_set
     auth_service.update_user_settings(current_user_id, {'default_theme': new_theme})
     st.session_state.user_preferences['default_theme'] = new_theme; logger.info(f"User {current_user_id} theme updated to {new_theme}."); st.rerun()
 st.sidebar.markdown("---")
-# ... (File selection, delete, SidebarManager, and filter handling as updated for user settings persistence) ...
 st.sidebar.subheader("📁 Your Trading Journals")
 user_files = data_service.list_user_files(current_user_id)
 file_options = {f"{f.original_file_name} ({f.upload_timestamp.strftime('%Y-%m-%d %H:%M')})": f.id for f in user_files}
-file_options["✨ Upload New File..."] = "upload_new"
-default_file_selection_label = "✨ Upload New File..."
+file_options["✨ Upload New File..."] = "upload_new"; default_file_selection_label = "✨ Upload New File..."
 if st.session_state.selected_user_file_id and st.session_state.selected_user_file_id != "upload_new":
     matching_label = next((label for label, id_val in file_options.items() if id_val == st.session_state.selected_user_file_id), None)
     if matching_label: default_file_selection_label = matching_label
@@ -303,10 +389,6 @@ if current_sidebar_filters:
         auth_service.update_user_settings(current_user_id, updated_settings_payload)
         for key, value in updated_settings_payload.items(): st.session_state.user_preferences[key] = value
         logger.info(f"User {current_user_id} preferences updated: {updated_settings_payload}")
-
-
-# --- Data Processing Pipeline (as before, with mapping persistence logic) ---
-# ... (This extensive section remains as updated in the previous step for column mapping) ...
 active_file_content_to_process = st.session_state.get('current_file_content_for_processing')
 active_file_name_for_processing = st.session_state.get('uploaded_file_name')
 @log_execution_time
@@ -346,9 +428,6 @@ elif not active_file_content_to_process and st.session_state.authenticated_user:
         keys_to_clear = ['processed_data', 'filtered_data', 'kpi_results', 'uploaded_file_name', 'last_processed_file_id', 'user_column_mapping', 'column_mapping_confirmed', 'csv_headers_for_mapping', 'last_uploaded_file_for_mapping_id', 'benchmark_daily_returns', 'max_drawdown_period_details', 'uploaded_file_bytes_for_mapper', 'current_file_content_for_processing', 'last_processed_mapping_for_file_id']
         for k in keys_to_clear: st.session_state[k] = None
         if st.session_state.get('selected_user_file_id') is not None: st.session_state.selected_user_file_id = None
-
-# --- Data Filtering, KPI Calc, Main Page Layout (as before) ---
-# ... (These sections remain unchanged by the user settings persistence logic itself) ...
 if st.session_state.get('processed_data') is not None and not st.session_state.processed_data.empty and st.session_state.get('sidebar_filters'):
     if st.session_state.filtered_data is None or st.session_state.last_applied_filters != st.session_state.sidebar_filters:
         with st.spinner("Applying filters..."): st.session_state.filtered_data = filter_data_with_profiling(st.session_state.processed_data, st.session_state.sidebar_filters, EXPECTED_COLUMNS)
@@ -401,8 +480,24 @@ if st.session_state.get('filtered_data') is not None and not st.session_state.fi
 elif st.session_state.get('filtered_data') is not None and st.session_state.filtered_data.empty:
     if st.session_state.get('processed_data') is not None and not st.session_state.processed_data.empty: display_custom_message("No data matches filters.", "info")
     st.session_state.kpi_results = None; st.session_state.kpi_confidence_intervals = {}; st.session_state.max_drawdown_period_details = None
-
-# (main_page_layout and final display logic as before)
+def main_page_layout():
+    st.markdown("<div class='welcome-container'>", unsafe_allow_html=True)
+    st.markdown("<div class='hero-section'><h1 class='welcome-title'>Trading Dashboard</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p class='welcome-subtitle'>Powered by {PAGE_CONFIG_APP_TITLE}</p></div>", unsafe_allow_html=True)
+    st.markdown("<p class='tagline'>Unlock insights from your trading data.</p>", unsafe_allow_html=True)
+    if not st.session_state.get('current_file_content_for_processing') and not st.session_state.get('processed_data'):
+        st.info("No trading journal loaded. Select or upload one via the sidebar.", icon="📄")
+    st.markdown("<h2 class='features-title' style='text-align: center; color: var(--secondary-color); margin-top: 2rem;'>Get Started</h2>", unsafe_allow_html=True)
+    col1,col2,col3 = st.columns(3, gap="large")
+    with col1: st.markdown("<div class='feature-item'><h4>📄 Manage Files</h4><p>Upload or select journals via sidebar.</p></div>", unsafe_allow_html=True)
+    with col2: st.markdown("<div class='feature-item'><h4>📊 Analyze</h4><p>Explore metrics once data is processed.</p></div>", unsafe_allow_html=True)
+    with col3: st.markdown("<div class='feature-item'><h4>💡 Discover</h4><p>Use filters for deeper insights.</p></div>", unsafe_allow_html=True)
+    st.markdown("<br><div style='text-align: center; margin-top: 30px;'>", unsafe_allow_html=True)
+    user_guide_page_path = "pages/0_❓_User_Guide.py"
+    if os.path.exists(user_guide_page_path):
+        if st.button("📘 Read User Guide", key="welcome_guide_btn_auth_v3"): st.switch_page(user_guide_page_path)
+    else: st.markdown("<p>User guide not found.</p>", unsafe_allow_html=True); logger.warning(f"User Guide not found: {user_guide_page_path}")
+    st.markdown("</div></div>", unsafe_allow_html=True)
 processed_data_main_final = st.session_state.get('processed_data')
 condition_for_main_layout_final = not st.session_state.get('current_file_content_for_processing') and \
     not (st.session_state.get('column_mapping_confirmed') and processed_data_main_final is not None and not processed_data_main_final.empty)
@@ -411,3 +506,4 @@ elif (st.session_state.get('processed_data') is None or st.session_state.get('pr
     if not st.session_state.get('csv_headers_for_mapping'): display_custom_message("Preparing for column mapping...", "info")
 scroll_buttons_component = ScrollButtons(); scroll_buttons_component.render()
 logger.info(f"App run cycle finished for user '{current_username}'. File ID: {st.session_state.get('selected_user_file_id')}")
+
