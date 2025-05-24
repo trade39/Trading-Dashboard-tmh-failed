@@ -5,7 +5,7 @@ import pandas as pd
 from typing import Optional, Any, Dict, List
 import yfinance as yf
 import logging
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey # Added for TradeNoteDB if not already present
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 import datetime as dt
@@ -17,31 +17,32 @@ from io import BytesIO
 try:
     from config import APP_TITLE, EXPECTED_COLUMNS
     # Ensure data_processing is in the root or accessible via PYTHONPATH
-    from data_processing import load_and_process_data
-    from .database_setup import Base, get_db_session, UserFile, UserFileMapping, TradeNoteDB # Added TradeNoteDB here
+    from data_processing import load_and_process_data # Assuming data_processing.py is at the root
+    from .database_setup import Base, get_db_session, UserFile, UserFileMapping, TradeNoteDB
 except ImportError as e:
     print(f"Warning (data_service.py): Could not import modules: {e}. Using placeholders.")
     APP_TITLE = "TradingDashboard_Default_Service"
-    EXPECTED_COLUMNS = {"date": "date", "pnl": "pnl", "symbol": "symbol", "strategy": "strategy", "trade_id": "trade_id", "notes": "notes"}
+    EXPECTED_COLUMNS = {"date": "date", "pnl": "pnl"} # Minimal fallback
     from sqlalchemy.orm import declarative_base, sessionmaker
     from sqlalchemy import create_engine
     Base = declarative_base() # type: ignore
-    engine_fallback_data = create_engine("sqlite:///./temp_data_service_test.db")
+    engine_fallback_data = create_engine("sqlite:///./temp_data_service_fallback.db") # Fallback DB
     SessionLocal_fallback_data = sessionmaker(autocommit=False, autoflush=False, bind=engine_fallback_data)
     def get_db_session(): return SessionLocal_fallback_data()
     def load_and_process_data(uploaded_file_obj: Any, user_column_mapping: Optional[Dict[str, str]] = None, original_file_name: Optional[str] = None) -> Optional[pd.DataFrame]:
         if uploaded_file_obj:
-            try: return pd.read_csv(uploaded_file_obj)
+            try: return pd.read_csv(uploaded_file_obj) # Simplistic fallback
             except: return None
         return None
+    # Minimal fallback models
     class UserFile(Base): # type: ignore
-        __tablename__ = "user_files_fb_ds" # Unique name for fallback
+        __tablename__ = "user_files_fb_ds_v2"
         id=Column(Integer, primary_key=True); user_id=Column(Integer); original_file_name=Column(String); storage_identifier=Column(String, unique=True); file_size_bytes=Column(Integer); upload_timestamp=Column(DateTime, default=dt.datetime.utcnow); file_hash=Column(String); status=Column(String, default="active")
     class UserFileMapping(Base): # type: ignore
-        __tablename__ = "user_file_mappings_fb_ds" # Unique name
+        __tablename__ = "user_file_mappings_fb_ds_v2"
         id=Column(Integer, primary_key=True); user_id=Column(Integer); user_file_id=Column(Integer); conceptual_column=Column(String); csv_column_name=Column(String); mapped_timestamp=Column(DateTime, default=dt.datetime.utcnow)
     class TradeNoteDB(Base): # type: ignore
-        __tablename__ = "trade_notes_fb_ds" # Unique name
+        __tablename__ = "trade_notes_fb_ds_v2"
         id=Column(Integer, primary_key=True); user_id=Column(Integer); trade_identifier=Column(String); note_timestamp=Column(DateTime, default=dt.datetime.utcnow); note_content=Column(Text); tags=Column(String)
     Base.metadata.create_all(bind=engine_fallback_data)
 
@@ -55,7 +56,6 @@ if not os.path.exists(USER_FILES_ROOT_DIR):
         logger.info(f"Created root directory for user file storage: {USER_FILES_ROOT_DIR}")
     except OSError as e:
         logger.error(f"Could not create root directory {USER_FILES_ROOT_DIR}: {e}. Local file storage will fail.")
-
 
 @st.cache_data(ttl=3600)
 def get_benchmark_data_static(
@@ -79,7 +79,6 @@ def get_benchmark_data_static(
         if daily_returns.empty: return None
         daily_returns.name = f"{ticker}_returns"; return daily_returns
     except Exception as e: logger_static_func.error(f"Error fetching benchmark {ticker}: {e}", exc_info=True); return None
-
 
 class DataService:
     def __init__(self):
@@ -205,7 +204,7 @@ class DataService:
         safe_basename = "".join(c if c.isalnum() or c in ['.', '_', '-'] else '_' for c in os.path.splitext(original_filename)[0])
         extension = os.path.splitext(original_filename)[1]
         storage_filename = f"{safe_basename}_{unique_suffix}{extension}"
-        storage_identifier = os.path.join(str(user_id), storage_filename)
+        storage_identifier = os.path.join(str(user_id), storage_filename) # Path relative to USER_FILES_ROOT_DIR
         full_storage_path = os.path.join(USER_FILES_ROOT_DIR, storage_identifier)
         try:
             with open(full_storage_path, "wb") as f: f.write(file_content_bytes)
@@ -245,7 +244,7 @@ class DataService:
         try:
             user_file_rec = db.query(UserFile).filter(
                 UserFile.id == user_file_id,
-                UserFile.user_id == user_id, # Ensure the file belongs to the requesting user
+                UserFile.user_id == user_id,
                 UserFile.status == "active"
             ).first()
             if not user_file_rec:
@@ -298,7 +297,7 @@ class DataService:
             db.query(UserFileMapping).filter_by(user_id=user_id, user_file_id=user_file_id).delete(synchronize_session=False)
             new_mappings_to_add = []
             for conceptual_col, csv_col_name in mapping.items():
-                if csv_col_name:
+                if csv_col_name: # Only save if a CSV column is actually selected
                     new_mappings_to_add.append(UserFileMapping(user_id=user_id, user_file_id=user_file_id, conceptual_column=conceptual_col, csv_column_name=csv_col_name))
             if new_mappings_to_add: db.add_all(new_mappings_to_add)
             db.commit()
