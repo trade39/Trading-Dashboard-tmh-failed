@@ -6,7 +6,7 @@ from collections import OrderedDict
 from io import BytesIO
 from thefuzz import fuzz
 import re
-import chardet # Ensure chardet is available
+import chardet
 
 try:
     from config import (
@@ -29,7 +29,7 @@ class ColumnMapperUI:
     def __init__(
         self,
         uploaded_file_name: str,
-        uploaded_file_bytes: Optional[BytesIO],
+        uploaded_file_bytes: Optional[BytesIO], # This is the full BytesIO object
         csv_headers: List[str], # Headers already extracted by app.py
         conceptual_columns_map: Dict[str, str],
         conceptual_column_types: Dict[str, str],
@@ -39,9 +39,9 @@ class ColumnMapperUI:
         initial_mapping_override: Optional[Dict[str, Optional[str]]] = None
     ):
         self.uploaded_file_name = uploaded_file_name
-        self.uploaded_file_bytes = uploaded_file_bytes # Keep for preview
-        self.csv_headers_for_select = [""] + csv_headers # For dropdowns
-        self.raw_csv_headers_for_preview = csv_headers # For preview_df column matching
+        self.uploaded_file_bytes_for_preview = uploaded_file_bytes # Store for preview
+        self.csv_headers_for_select = [""] + csv_headers
+        self.raw_csv_headers_for_preview_matching = csv_headers # Actual headers from file
         self.conceptual_columns_map = conceptual_columns_map
         self.conceptual_column_types = conceptual_column_types
         self.conceptual_column_synonyms = conceptual_column_synonyms
@@ -51,33 +51,58 @@ class ColumnMapperUI:
         self.mapping: Dict[str, Optional[str]] = {}
         self.preview_df: Optional[pd.DataFrame] = None
 
-        # Generate preview_df within __init__ using uploaded_file_bytes
-        if self.uploaded_file_bytes:
+        if self.uploaded_file_bytes_for_preview:
             try:
-                with st.spinner("Generating data preview for mapping..."): # Spinner for preview
-                    self.uploaded_file_bytes.seek(0)
-                    # More robust preview reading
+                with st.spinner("Generating data preview for mapping... (max 50KB sample)"):
+                    self.uploaded_file_bytes_for_preview.seek(0)
+                    sample_limit_bytes = 50 * 1024  # 50KB
+                    
+                    # Determine actual bytes to read for preview sample
+                    actual_buffer_size = 0
+                    if hasattr(self.uploaded_file_bytes_for_preview, 'getbuffer'):
+                        actual_buffer_size = self.uploaded_file_bytes_for_preview.getbuffer().nbytes
+                    elif hasattr(self.uploaded_file_bytes_for_preview, 'seek') and hasattr(self.uploaded_file_bytes_for_preview, 'tell'):
+                        current_pos = self.uploaded_file_bytes_for_preview.tell()
+                        self.uploaded_file_bytes_for_preview.seek(0, os.SEEK_END)
+                        actual_buffer_size = self.uploaded_file_bytes_for_preview.tell()
+                        self.uploaded_file_bytes_for_preview.seek(current_pos) # Restore position
+                    
+                    bytes_to_read_for_preview = min(actual_buffer_size, sample_limit_bytes) if actual_buffer_size > 0 else sample_limit_bytes
+
+                    preview_sample_bytes = self.uploaded_file_bytes_for_preview.read(bytes_to_read_for_preview)
+                    self.uploaded_file_bytes_for_preview.seek(0) # IMPORTANT: Reset for app.py if it needs to re-read full
+
+                    preview_io = BytesIO(preview_sample_bytes)
+                    detected_encoding = 'utf-8' # Default
                     try:
-                        self.preview_df = pd.read_csv(self.uploaded_file_bytes, nrows=5, engine='python', skipinitialspace=True)
-                    except UnicodeDecodeError:
-                        self.uploaded_file_bytes.seek(0)
-                        raw_sample = self.uploaded_file_bytes.read(min(50000, self.uploaded_file_bytes.getbuffer().nbytes if hasattr(self.uploaded_file_bytes, 'getbuffer') else 50000)) # Read a sample
-                        detected = chardet.detect(raw_sample)
-                        detected_encoding = detected.get('encoding', 'latin1') # Fallback to latin1
-                        confidence = detected.get('confidence', 0.0)
-                        logger.info(f"ColumnMapperUI preview: Encoding detected as {detected_encoding} with confidence {confidence:.2f}.")
-                        self.uploaded_file_bytes.seek(0)
-                        self.preview_df = pd.read_csv(self.uploaded_file_bytes, nrows=5, encoding=detected_encoding, engine='python', skipinitialspace=True)
-                    except pd.errors.ParserError as pe: # Catch pandas parsing errors
-                        logger.error(f"ColumnMapperUI: Pandas ParserError reading CSV for preview ('{self.uploaded_file_name}'): {pe}", exc_info=True)
-                        st.warning(f"Could not generate data preview: The CSV file structure might be irregular. Error: {pe}")
+                        # Attempt with utf-8 first
+                        self.preview_df = pd.read_csv(preview_io, nrows=5, engine='python', skipinitialspace=True, encoding=detected_encoding)
+                        logger.info(f"ColumnMapperUI preview: Successfully read with {detected_encoding}.")
+                    except (UnicodeDecodeError, pd.errors.ParserError) as e_utf8:
+                        logger.warning(f"ColumnMapperUI preview: UTF-8 failed ({e_utf8}). Trying chardet.")
+                        preview_io.seek(0) # Reset for chardet
+                        # Ensure preview_sample_bytes is not empty for chardet
+                        if not preview_sample_bytes:
+                             logger.error("ColumnMapperUI preview: Sample bytes for chardet are empty.")
+                             self.preview_df = None
+                        else:
+                            detected = chardet.detect(preview_sample_bytes)
+                            detected_encoding = detected.get('encoding', 'latin1') # Fallback to latin1
+                            confidence = detected.get('confidence', 0.0)
+                            logger.info(f"ColumnMapperUI preview: Encoding for sample detected as {detected_encoding} with confidence {confidence:.2f}.")
+                            preview_io.seek(0)
+                            try:
+                                self.preview_df = pd.read_csv(preview_io, nrows=5, encoding=detected_encoding, engine='python', skipinitialspace=True)
+                            except Exception as e_chardet_read:
+                                logger.error(f"ColumnMapperUI preview: Failed to read with chardet encoding {detected_encoding}: {e_chardet_read}", exc_info=True)
+                                self.preview_df = None # Set to None on failure
+                    except pd.errors.EmptyDataError:
+                        logger.warning(f"ColumnMapperUI preview: CSV for '{self.uploaded_file_name}' appears empty or has no data in the first 5 rows.")
+                        self.preview_df = pd.DataFrame(columns=self.raw_csv_headers_for_preview_matching) # Empty df with headers
+                    except Exception as e_preview_read:
+                        logger.error(f"ColumnMapperUI preview: Generic error reading CSV ('{self.uploaded_file_name}'): {e_preview_read}", exc_info=True)
                         self.preview_df = None
-                    except Exception as e_preview_read: # Catch other general errors
-                        logger.error(f"ColumnMapperUI: Generic error reading CSV for preview ('{self.uploaded_file_name}'): {e_preview_read}", exc_info=True)
-                        st.warning(f"Could not generate data preview due to an unexpected error: {e_preview_read}")
-                        self.preview_df = None
-                self.uploaded_file_bytes.seek(0) # Ensure pointer is reset for any subsequent reads
-            except Exception as e_outer_preview: # Catch errors from seek or spinner context
+            except Exception as e_outer_preview:
                  logger.error(f"ColumnMapperUI: Outer error during preview generation ('{self.uploaded_file_name}'): {e_outer_preview}", exc_info=True)
                  self.preview_df = None
         
@@ -92,14 +117,12 @@ class ColumnMapperUI:
 
     def _attempt_automatic_mapping(self) -> Dict[str, Optional[str]]:
         auto_mapping: Dict[str, Optional[str]] = {}
-        # Use raw_csv_headers_for_preview for mapping as these are the actual headers from the file
-        normalized_csv_headers_map = {self._normalize_header(h): h for h in self.raw_csv_headers_for_preview}
+        normalized_csv_headers_map = {self._normalize_header(h): h for h in self.raw_csv_headers_for_preview_matching}
         used_csv_headers = set()
-
         specific_csv_header_targets = {
             "trade_model": "strategy", "r_r": "r_r_csv_num", "pnl": "pnl", "date": "date",
             "symbol_1": "symbol", "lesson_learned": "notes", "duration_mins": "duration_minutes",
-            "risk_pct": "risk_pct", "entry": "entry_price", "exit": "exit_price", "size": "trade_size_num" # Corrected "size" target
+            "risk_pct": "risk_pct", "entry": "entry_price", "exit": "exit_price", "size": "trade_size_num"
         }
         for norm_specific_csv, target_conceptual_key in specific_csv_header_targets.items():
             if norm_specific_csv in normalized_csv_headers_map:
@@ -107,7 +130,6 @@ class ColumnMapperUI:
                 if original_csv_header not in used_csv_headers and target_conceptual_key not in auto_mapping:
                     auto_mapping[target_conceptual_key] = original_csv_header
                     used_csv_headers.add(original_csv_header)
-
         for conceptual_key in self.conceptual_columns_map.keys():
             if conceptual_key in auto_mapping: continue
             mapped_csv_header = None; norm_conceptual_key = self._normalize_header(conceptual_key)
@@ -138,7 +160,6 @@ class ColumnMapperUI:
         if column_sample.empty: return "empty"
         try:
             numeric_sample = pd.to_numeric(column_sample)
-            # Check if all numeric values are integers
             if (numeric_sample.dropna() % 1 == 0).all(): return "integer"
             return "float"
         except (ValueError, TypeError): pass
@@ -160,8 +181,7 @@ class ColumnMapperUI:
                     try: default_index = self.csv_headers_for_select.index(default_csv_header)
                     except ValueError: logger.error(f"Error finding index for '{default_csv_header}' for '{conceptual_key}'.")
                 elif default_csv_header: logger.warning(f"Default CSV header '{default_csv_header}' for '{conceptual_key}' not in available CSV headers for selectbox.")
-
-                selectbox_key = f"map_{self.uploaded_file_name.replace('.', '_').replace(' ', '_')}_{conceptual_key}_v3_fixed"
+                selectbox_key = f"map_{self.uploaded_file_name.replace('.', '_').replace(' ', '_')}_{conceptual_key}_v4_mapper_hang"
                 st.markdown(f"<label class='selectbox-label' for='{selectbox_key}'>{label_html}</label>", unsafe_allow_html=True)
                 selected_csv_col = st.selectbox("", options=self.csv_headers_for_select, index=default_index, key=selectbox_key, label_visibility="collapsed", help=f"Select CSV column for '{conceptual_desc}'. Expected type: '{self.conceptual_column_types.get(conceptual_key, 'any')}'. {'Critical.' if is_critical else 'Optional.'}")
                 self.mapping[conceptual_key] = selected_csv_col if selected_csv_col else None
@@ -180,7 +200,7 @@ class ColumnMapperUI:
 
         st.markdown("<div class='data-preview-container'>", unsafe_allow_html=True)
         if self.preview_df is not None and not self.preview_df.empty:
-            df_to_display_preview = self.preview_df.copy() # Work with a copy for display ordering
+            df_to_display_preview = self.preview_df.copy()
             try:
                 ordered_conceptual_keys = list(self.conceptual_columns_map.keys())
                 mapped_csv_cols_ordered = []
@@ -194,16 +214,16 @@ class ColumnMapperUI:
                 if set(final_display_order) == set(df_to_display_preview.columns) and len(final_display_order) == len(df_to_display_preview.columns):
                     df_to_display_preview = df_to_display_preview[final_display_order]
             except Exception as e_reorder: logger.error(f"Error reordering preview for '{self.uploaded_file_name}': {e_reorder}.")
-            st.markdown("<p class='data-preview-title'>Data Preview (First 5 Rows):</p>", unsafe_allow_html=True)
+            st.markdown("<p class='data-preview-title'>Data Preview (First 5 Rows of Sample):</p>", unsafe_allow_html=True)
             st.dataframe(df_to_display_preview, hide_index=True, use_container_width=True)
-        elif self.uploaded_file_bytes is not None: # If bytes exist but preview_df is None, means preview failed
-            st.markdown("<div class='data-preview-placeholder' style='color: var(--error-color);'>Could not generate data preview. The file might be corrupted or not a standard CSV. Please check the file and try re-uploading.</div>", unsafe_allow_html=True)
-        else: # No file bytes at all
+        elif self.uploaded_file_bytes_for_preview is not None:
+            st.markdown("<div class='data-preview-placeholder' style='color: var(--error-color);'>Could not generate data preview. The file might be corrupted, not a standard CSV, or the initial sample (first 50KB) was unparsable. Please check the file and try re-uploading.</div>", unsafe_allow_html=True)
+        else:
              st.markdown("<div class='data-preview-placeholder'>Data preview is not available (no file content).</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div class='mapper-instructions'><span class='instruction-icon'>ℹ️</span> Map your CSV columns to the application's expected fields. Fields marked with a red asterisk (<strong>*</strong>) are critical. A warning icon (⚠️) next to a selection indicates a potential data type mismatch.</div>", unsafe_allow_html=True)
-        form_key = f"column_mapping_form_{self.uploaded_file_name.replace('.', '_').replace(' ', '_')}_v3_fixed"
+        form_key = f"column_mapping_form_{self.uploaded_file_name.replace('.', '_').replace(' ', '_')}_v4_mapper_hang"
         with st.form(key=form_key):
             cols_top_button = st.columns([0.75, 0.25]);
             with cols_top_button[1]: submit_button_top = st.form_submit_button("Confirm Mapping", use_container_width=True, type="primary")
@@ -216,10 +236,9 @@ class ColumnMapperUI:
                     if not valid_keys_in_category: continue
                     has_critical_in_cat = any(key in self.critical_conceptual_cols for key in valid_keys_in_category)
                     expander_label_html = f"<strong>{category_name}</strong>" + (" <span class='critical-marker'>*</span>" if has_critical_in_cat else "")
-                    # Default expand if critical unmapped, or if it's the first few core categories
                     is_core_category = category_name.lower() in ["critical trade info", "core"]
                     open_by_default = is_core_category or any(key in self.critical_conceptual_cols and not effective_initial_mapping.get(key) for key in valid_keys_in_category)
-                    st.markdown(f"<h6>{expander_label_html}</h6>", unsafe_allow_html=True) # Use h6 for category titles
+                    st.markdown(f"<h6>{expander_label_html}</h6>", unsafe_allow_html=True)
                     with st.expander("View/Edit Mappings", expanded=open_by_default): self._render_mapping_selectboxes(valid_keys_in_category, effective_initial_mapping)
             st.markdown("<hr class='styled-hr'>", unsafe_allow_html=True)
             _, col_btn_mid, _ = st.columns([0.3, 0.4, 0.3]);
