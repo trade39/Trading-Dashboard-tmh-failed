@@ -5,30 +5,26 @@ import pandas as pd
 from typing import Optional, Any, Dict, List
 import yfinance as yf
 import logging
-# SQLAlchemy components will be imported from database_setup
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text # Keep for model definition
 from sqlalchemy.orm import Session # Keep for type hinting
 from sqlalchemy.exc import SQLAlchemyError
 import datetime as dt
 
 try:
-    from config import APP_TITLE, EXPECTED_COLUMNS # DATABASE_URL is now in database_setup
+    from config import APP_TITLE, EXPECTED_COLUMNS
     from data_processing import load_and_process_data
-    from .database_setup import Base, get_db_session # Import from new database_setup
+    from .database_setup import Base, get_db_session # <<< IMPORT FROM database_setup
 except ImportError as e:
     print(f"Warning (data_service.py): Could not import from root config, data_processing, or database_setup: {e}. Using placeholders.")
     APP_TITLE = "TradingDashboard_Default_Service"
     EXPECTED_COLUMNS = {"date": "date", "pnl": "pnl", "symbol": "symbol", "strategy": "strategy", "trade_id": "trade_id", "notes": "notes"}
-    # Fallback Base and get_db_session if database_setup fails to import
     from sqlalchemy.orm import declarative_base, sessionmaker
     from sqlalchemy import create_engine
     Base = declarative_base() # type: ignore
     engine_fallback_data = create_engine("sqlite:///./temp_data_service_test.db")
     SessionLocal_fallback_data = sessionmaker(autocommit=False, autoflush=False, bind=engine_fallback_data)
     def get_db_session(): return SessionLocal_fallback_data()
-
     def load_and_process_data(uploaded_file_obj: Any, user_column_mapping: Optional[Dict[str, str]] = None) -> Optional[pd.DataFrame]:
-        # Simplified placeholder
         if uploaded_file_obj:
             try: return pd.read_csv(uploaded_file_obj)
             except: return None
@@ -36,7 +32,6 @@ except ImportError as e:
 
 logger = logging.getLogger(APP_TITLE)
 
-# TradeNoteDB model definition
 class TradeNoteDB(Base): # type: ignore
     __tablename__ = "trade_notes"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
@@ -44,19 +39,17 @@ class TradeNoteDB(Base): # type: ignore
     note_timestamp = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
     note_content = Column(Text, nullable=False)
     tags = Column(String, nullable=True)
-    # user_id = Column(Integer, ForeignKey("users.id"), nullable=False) # Will be added in Phase 3
 
     def __repr__(self):
         return f"<TradeNoteDB(id={self.id}, trade_identifier='{self.trade_identifier}')>"
 
-# get_benchmark_data_static remains here as it's data fetching, not DB setup
 @st.cache_data(ttl=3600)
 def get_benchmark_data_static(
     ticker: str,
     start_date_str: str,
     end_date_str: str
 ) -> Optional[pd.Series]:
-    logger_static_func = logging.getLogger(f"{APP_TITLE}.get_benchmark_data_static") # Use APP_TITLE
+    logger_static_func = logging.getLogger(f"{APP_TITLE}.get_benchmark_data_static")
     logger_static_func.info(f"Executing get_benchmark_data_static for {ticker} from {start_date_str} to {end_date_str}")
     if not ticker:
         logger_static_func.info("No benchmark ticker provided.")
@@ -67,27 +60,20 @@ def get_benchmark_data_static(
         if start_dt > end_dt:
             logger_static_func.warning(f"Benchmark start date {start_date_str} is after end date {end_date_str}.")
             return None
-        
-        fetch_end_dt = end_dt + pd.Timedelta(days=1) # yfinance often excludes end_date
-        if start_dt == end_dt: # Ensure at least 2 days for yfinance if start=end
-            fetch_end_dt = end_dt + pd.Timedelta(days=2)
-
+        fetch_end_dt = end_dt + pd.Timedelta(days=1)
+        if start_dt == end_dt: fetch_end_dt = end_dt + pd.Timedelta(days=2)
         data = yf.download(ticker, start=start_dt, end=fetch_end_dt, progress=False, auto_adjust=True, actions=False)
-        
         if data.empty or 'Close' not in data.columns:
             logger_static_func.warning(f"No data or 'Close' column not found for benchmark {ticker} in range {start_date_str}-{end_date_str}.")
             return None
-        
         daily_adj_close = data['Close'].dropna()
-        if len(daily_adj_close) < 2: # Need at least two points to calculate returns
+        if len(daily_adj_close) < 2:
             logger_static_func.warning(f"Not enough benchmark data points ({len(daily_adj_close)}) for {ticker} to calculate returns.")
             return None
-            
         daily_returns = daily_adj_close.pct_change().dropna()
         if daily_returns.empty:
             logger_static_func.warning(f"Calculated daily returns for benchmark {ticker} are empty.")
             return None
-            
         daily_returns.name = f"{ticker}_returns"
         logger_static_func.info(f"Successfully fetched benchmark returns for {ticker}. Shape: {daily_returns.shape}")
         return daily_returns
@@ -99,13 +85,9 @@ class DataService:
     def __init__(self):
         self.logger = logging.getLogger(APP_TITLE)
         self.logger.info("DataService initialized.")
-        # Table creation is now handled by create_db_tables in database_setup.py, called from app.py
 
     def _get_db(self) -> Optional[Session]:
-        return get_db_session() # Use the imported session getter
-
-    # get_processed_trading_data, filter_data, and note CRUD methods remain largely the same,
-    # but they will use self._get_db() which now gets session from database_setup.py
+        return get_db_session()
 
     def get_processed_trading_data(
         self,
@@ -113,7 +95,6 @@ class DataService:
         user_column_mapping: Optional[Dict[str, str]] = None,
         original_file_name: Optional[str] = None
     ) -> Optional[pd.DataFrame]:
-        # ... (implementation as before) ...
         if uploaded_file_obj is None: return None
         file_name_for_log = original_file_name or getattr(uploaded_file_obj, 'name', "In-memory CSV data")
         try:
@@ -128,15 +109,14 @@ class DataService:
             self.logger.error(f"DataService: Error processing '{file_name_for_log}': {e_process}", exc_info=True)
             return None
 
-
     def filter_data(
         self,
         df: pd.DataFrame,
         filters: Dict[str, Any],
         column_map: Optional[Dict[str, str]] = None
     ) -> pd.DataFrame:
-        # ... (implementation as before) ...
         if df is None or df.empty: return pd.DataFrame()
+        # ... (rest of filter_data implementation as before) ...
         effective_column_map = column_map if column_map is not None else EXPECTED_COLUMNS
         filtered_df = df.copy()
         self.logger.info(f"DataService: Applying filters. Initial shape: {filtered_df.shape}. Filters: {filters}")
@@ -188,7 +168,6 @@ class DataService:
         try:
             query = db.query(TradeNoteDB)
             if trade_identifier: query = query.filter(TradeNoteDB.trade_identifier == trade_identifier)
-            # ... (date filtering logic as before) ...
             if start_date: query = query.filter(TradeNoteDB.note_timestamp >= start_date)
             if end_date:
                 end_date_inclusive = end_date + dt.timedelta(days=1) - dt.timedelta(microseconds=1)
