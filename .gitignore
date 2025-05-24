@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal # SQLite journal file
+*.db-wal    # SQLite write-ahead log
+*.db-shm    # SQLite shared-memory file
+
+# Logs
+logs/
+*.log
+
+# Streamlit
+.streamlit/secrets.toml # Streamlit Cloud secrets file (if used locally, though typically managed on the platform)
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+.coverage
+coverage.xml
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Temporary files from various tools
+*.tmp
+*.bak
