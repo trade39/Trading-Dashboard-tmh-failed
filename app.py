@@ -25,20 +25,18 @@ try:
     from components.column_mapper_ui import ColumnMapperUI
     from components.scroll_buttons import ScrollButtons
     
-    # Import services and the new create_db_tables from database_setup via services package
-    from services import (
+    from services import ( # Import from the services package
         DataService, 
         AnalysisService, 
         AuthService,
-        create_db_tables, # <<< Import from services package
-        get_benchmark_data_static # Already exported by services/__init__
+        create_db_tables, 
+        get_benchmark_data_static 
     )
 except ImportError as e:
     st.error(f"Fatal Error: A critical module could not be imported. App cannot start. Details: {e}")
     logging.basicConfig(level=logging.ERROR)
     logging.error(f"Fatal Error during initial imports: {e}", exc_info=True)
-    APP_TITLE = "TradingAppError" # Fallback
-    # Minimal logger setup if main one fails
+    APP_TITLE = "TradingAppError" 
     try:
         logger = logging.getLogger(APP_TITLE)
         if not logger.handlers:
@@ -62,24 +60,21 @@ st.set_page_config(
 )
 
 # --- Initialize Logger, Services, and Database Tables ---
-logger = setup_logger(logger_name=APP_TITLE, log_file=LOG_FILE, level=LOG_LEVEL, log_format=LOG_FORMAT) # LOG_FILE etc. from config
+logger = setup_logger(logger_name=APP_TITLE, log_file=LOG_FILE, level=LOG_LEVEL, log_format=LOG_FORMAT)
 logger.info(f"Application '{APP_TITLE}' starting. Logger initialized.")
 
-# Initialize services
 data_service = DataService()
 analysis_service_instance = AnalysisService()
 auth_service = AuthService()
 
-# Create database tables (User, TradeNoteDB, etc.)
-# This is called once at startup after all models are defined and imported.
 try:
-    create_db_tables() # This now imports all models within itself
+    create_db_tables() 
     logger.info("Database tables checked/created successfully via centralized function.")
 except Exception as db_init_e:
     logger.critical(f"Failed to initialize database tables via centralized function: {db_init_e}", exc_info=True)
     st.error(f"Database Initialization Error: {db_init_e}. The application might not function correctly.")
-    # Consider st.stop() if DB is absolutely critical for any app functionality
 
+# ... (rest of app.py as provided in the previous turn, including theme management, auth UI, and main app logic) ...
 # --- Theme Management & CSS ---
 if 'current_theme' not in st.session_state:
     st.session_state.current_theme = "dark"
@@ -105,7 +100,6 @@ if 'authenticated_user' not in st.session_state: st.session_state.authenticated_
 if 'auth_flow_page' not in st.session_state: st.session_state.auth_flow_page = 'login'
 
 def display_login_form():
-    # ... (implementation as before) ...
     with st.container():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
         with st.form("login_form", border=True):
@@ -130,7 +124,6 @@ def display_login_form():
         st.markdown("</div>", unsafe_allow_html=True)
 
 def display_registration_form():
-    # ... (implementation as before) ...
     with st.container():
         st.markdown("<div style='display: flex; justify-content: center; margin-top: 5vh;'>", unsafe_allow_html=True)
         with st.form("registration_form", border=True):
@@ -151,7 +144,6 @@ def display_registration_form():
                         st.success(f"User '{reg_username}' registered successfully! Please login."); st.session_state.auth_flow_page = 'login'; st.rerun()
                     else:
                         if auth_service.get_user_by_username(reg_username): st.error(f"Username '{reg_username}' already exists.")
-                        # Add email check if get_user_by_email is implemented
                         else: st.error("Registration failed. Username/email might be taken or internal error.")
             if st.button("Already have an account? Login", use_container_width=True, key="goto_login_btn"):
                 st.session_state.auth_flow_page = 'login'; st.rerun()
@@ -164,9 +156,6 @@ if st.session_state.authenticated_user is None:
     else: st.session_state.auth_flow_page = 'login'; display_login_form()
     st.stop()
 
-# --- USER IS AUTHENTICATED ---
-# (Rest of your app.py logic for authenticated users, session state init, sidebar, data pipeline, etc.)
-# Ensure default_session_state_main_app is defined before use if it's conditional
 default_session_state_main_app = {
     'app_initialized': True, 'processed_data': None, 'filtered_data': None,
     'kpi_results': None, 'kpi_confidence_intervals': {},
@@ -186,13 +175,11 @@ default_session_state_main_app['selected_benchmark_display_name'] = next(
 for key, value in default_session_state_main_app.items():
     if key not in st.session_state: st.session_state[key] = value
 
-# Sidebar for authenticated user
-LOGO_PATH_SIDEBAR = "assets/Trading_Mastery_Hub_600x600.png" # Ensure this path is correct
+LOGO_PATH_SIDEBAR = "assets/Trading_Mastery_Hub_600x600.png"
 logo_base64 = None
 if os.path.exists(LOGO_PATH_SIDEBAR):
     try:
-        with open(LOGO_PATH_SIDEBAR, "rb") as image_file:
-            logo_base64 = base64.b64encode(image_file.read()).decode()
+        with open(LOGO_PATH_SIDEBAR, "rb") as image_file: logo_base64 = base64.b64encode(image_file.read()).decode()
     except Exception as e_logo: logger.error(f"Error encoding logo: {e_logo}", exc_info=True)
 
 if logo_base64: st.logo(f"data:image/png;base64,{logo_base64}", icon_image=f"data:image/png;base64,{logo_base64}")
@@ -203,14 +190,7 @@ st.sidebar.header(APP_TITLE)
 st.sidebar.markdown(f"Logged in as: **{st.session_state.authenticated_user['username']}**")
 if st.sidebar.button("🔒 Logout", key="logout_button_main_app", use_container_width=True):
     logger.info(f"User '{st.session_state.authenticated_user['username']}' logging out.")
-    user_specific_keys_to_clear = [
-        'authenticated_user', 'processed_data', 'filtered_data', 'kpi_results',
-        'kpi_confidence_intervals', 'uploaded_file_name', 'uploaded_file_bytes_for_mapper',
-        'last_processed_file_id', 'user_column_mapping', 'column_mapping_confirmed',
-        'csv_headers_for_mapping', 'last_uploaded_file_for_mapping_id', 'last_applied_filters',
-        'sidebar_filters', 'benchmark_daily_returns', 'max_drawdown_period_details',
-        'last_fetched_benchmark_ticker', 'last_benchmark_data_filter_shape', 'last_kpi_calc_state_id'
-    ]
+    user_specific_keys_to_clear = ['authenticated_user', 'processed_data', 'filtered_data', 'kpi_results', 'kpi_confidence_intervals', 'uploaded_file_name', 'uploaded_file_bytes_for_mapper', 'last_processed_file_id', 'user_column_mapping', 'column_mapping_confirmed', 'csv_headers_for_mapping', 'last_uploaded_file_for_mapping_id', 'last_applied_filters', 'sidebar_filters', 'benchmark_daily_returns', 'max_drawdown_period_details', 'last_fetched_benchmark_ticker', 'last_benchmark_data_filter_shape', 'last_kpi_calc_state_id']
     for key_to_clear in user_specific_keys_to_clear:
         if key_to_clear in st.session_state: del st.session_state[key_to_clear]
     st.session_state.auth_flow_page = 'login'; st.success("You have been logged out."); st.rerun()
@@ -228,20 +208,17 @@ st.session_state.sidebar_filters = current_sidebar_filters
 
 if current_sidebar_filters:
     rfr_from_sidebar = current_sidebar_filters.get('risk_free_rate', RISK_FREE_RATE)
-    if st.session_state.risk_free_rate != rfr_from_sidebar:
-        st.session_state.risk_free_rate = rfr_from_sidebar; st.session_state.kpi_results = None
+    if st.session_state.risk_free_rate != rfr_from_sidebar: st.session_state.risk_free_rate = rfr_from_sidebar; st.session_state.kpi_results = None
     benchmark_ticker_from_sidebar = current_sidebar_filters.get('selected_benchmark_ticker', "")
     if st.session_state.selected_benchmark_ticker != benchmark_ticker_from_sidebar:
         st.session_state.selected_benchmark_ticker = benchmark_ticker_from_sidebar
         st.session_state.selected_benchmark_display_name = next((n for n, t in AVAILABLE_BENCHMARKS.items() if t == benchmark_ticker_from_sidebar), "None")
         st.session_state.benchmark_daily_returns = None; st.session_state.kpi_results = None
     initial_capital_from_sidebar = current_sidebar_filters.get('initial_capital', 100000.0)
-    if st.session_state.initial_capital != initial_capital_from_sidebar:
-        st.session_state.initial_capital = initial_capital_from_sidebar; st.session_state.kpi_results = None
+    if st.session_state.initial_capital != initial_capital_from_sidebar: st.session_state.initial_capital = initial_capital_from_sidebar; st.session_state.kpi_results = None
 
 @log_execution_time
 def get_and_process_data_with_profiling(file_obj, mapping, name):
-    # ... (implementation as before) ...
     if hasattr(file_obj, 'getvalue') and not isinstance(file_obj, BytesIO):
         file_bytes_io = BytesIO(file_obj.getvalue()); file_bytes_io.seek(0)
         return data_service.get_processed_trading_data(file_bytes_io, user_column_mapping=mapping, original_file_name=name)
@@ -251,47 +228,34 @@ def get_and_process_data_with_profiling(file_obj, mapping, name):
     logger.error("get_and_process_data_with_profiling: file_obj is not compatible."); return None
 
 if uploaded_file is not None:
-    # ... (file processing logic as before, using st.session_state.uploaded_file_bytes_for_mapper) ...
     current_file_id_for_mapping = f"{uploaded_file.name}-{uploaded_file.size}-{uploaded_file.type}-mapping_stage"
     if st.session_state.last_uploaded_file_for_mapping_id != current_file_id_for_mapping:
-        logger.info(f"New file '{uploaded_file.name}' for mapping. Resetting relevant session state.")
-        for key_to_reset in ['column_mapping_confirmed', 'user_column_mapping', 'processed_data', 'filtered_data', 'kpi_results', 'kpi_confidence_intervals', 'benchmark_daily_returns', 'max_drawdown_period_details']:
-            st.session_state[key_to_reset] = None
-        st.session_state.uploaded_file_name = uploaded_file.name
-        st.session_state.last_uploaded_file_for_mapping_id = current_file_id_for_mapping
+        logger.info(f"New file '{uploaded_file.name}' for mapping. Resetting state.")
+        for key_to_reset in ['column_mapping_confirmed', 'user_column_mapping', 'processed_data', 'filtered_data', 'kpi_results', 'kpi_confidence_intervals', 'benchmark_daily_returns', 'max_drawdown_period_details']: st.session_state[key_to_reset] = None
+        st.session_state.uploaded_file_name = uploaded_file.name; st.session_state.last_uploaded_file_for_mapping_id = current_file_id_for_mapping
         try:
             st.session_state.uploaded_file_bytes_for_mapper = BytesIO(uploaded_file.getvalue()); st.session_state.uploaded_file_bytes_for_mapper.seek(0)
             df_peek = pd.read_csv(BytesIO(st.session_state.uploaded_file_bytes_for_mapper.getvalue()), nrows=5)
             st.session_state.csv_headers_for_mapping = df_peek.columns.tolist(); st.session_state.uploaded_file_bytes_for_mapper.seek(0)
         except Exception as e_header:
-            logger.error(f"Could not read CSV headers/preview from '{uploaded_file.name}': {e_header}", exc_info=True)
-            display_custom_message(f"Error reading from '{uploaded_file.name}': {e_header}. Ensure it's a valid CSV.", "error")
+            logger.error(f"Could not read CSV headers from '{uploaded_file.name}': {e_header}", exc_info=True)
+            display_custom_message(f"Error reading '{uploaded_file.name}': {e_header}. Ensure valid CSV.", "error")
             st.session_state.csv_headers_for_mapping = None; st.session_state.uploaded_file_bytes_for_mapper = None; st.stop()
-
     if st.session_state.csv_headers_for_mapping and not st.session_state.column_mapping_confirmed:
         st.session_state.processed_data = None; st.session_state.filtered_data = None
-        column_mapper = ColumnMapperUI(
-            uploaded_file_name=st.session_state.uploaded_file_name, uploaded_file_bytes=st.session_state.uploaded_file_bytes_for_mapper,
-            csv_headers=st.session_state.csv_headers_for_mapping, conceptual_columns_map=CONCEPTUAL_COLUMNS,
-            conceptual_column_types=CONCEPTUAL_COLUMN_TYPES, conceptual_column_synonyms=CONCEPTUAL_COLUMN_SYNONYMS,
-            critical_conceptual_cols=CRITICAL_CONCEPTUAL_COLUMNS, conceptual_column_categories=CONCEPTUAL_COLUMN_CATEGORIES
-        )
+        column_mapper = ColumnMapperUI(uploaded_file_name=st.session_state.uploaded_file_name, uploaded_file_bytes=st.session_state.uploaded_file_bytes_for_mapper, csv_headers=st.session_state.csv_headers_for_mapping, conceptual_columns_map=CONCEPTUAL_COLUMNS, conceptual_column_types=CONCEPTUAL_COLUMN_TYPES, conceptual_column_synonyms=CONCEPTUAL_COLUMN_SYNONYMS, critical_conceptual_cols=CRITICAL_CONCEPTUAL_COLUMNS, conceptual_column_categories=CONCEPTUAL_COLUMN_CATEGORIES)
         user_mapping_result = column_mapper.render()
-        if user_mapping_result is not None:
-            st.session_state.user_column_mapping = user_mapping_result; st.session_state.column_mapping_confirmed = True; st.rerun()
+        if user_mapping_result is not None: st.session_state.user_column_mapping = user_mapping_result; st.session_state.column_mapping_confirmed = True; st.rerun()
         else: st.stop()
-
     if st.session_state.column_mapping_confirmed and st.session_state.user_column_mapping:
         current_file_id_proc = f"{st.session_state.uploaded_file_name}-{uploaded_file.size}-{uploaded_file.type}-processing"
         if st.session_state.last_processed_file_id != current_file_id_proc or st.session_state.processed_data is None:
             with st.spinner(f"Processing '{st.session_state.uploaded_file_name}'..."):
                 file_obj_for_service = st.session_state.uploaded_file_bytes_for_mapper
                 if file_obj_for_service:
-                    file_obj_for_service.seek(0)
-                    st.session_state.processed_data = get_and_process_data_with_profiling(file_obj_for_service, st.session_state.user_column_mapping, st.session_state.uploaded_file_name)
-                # ... (rest of processing logic as before) ...
-                else: # Fallback if bytes were somehow lost
-                    logger.warning("uploaded_file_bytes_for_mapper was None. Re-reading from original uploaded_file.");
+                    file_obj_for_service.seek(0); st.session_state.processed_data = get_and_process_data_with_profiling(file_obj_for_service, st.session_state.user_column_mapping, st.session_state.uploaded_file_name)
+                else:
+                    logger.warning("uploaded_file_bytes_for_mapper was None. Re-reading.");
                     if uploaded_file: temp_bytes = BytesIO(uploaded_file.getvalue()); st.session_state.processed_data = get_and_process_data_with_profiling(temp_bytes,st.session_state.user_column_mapping,st.session_state.uploaded_file_name)
                     else: st.session_state.processed_data = None; logger.error("Original uploaded_file also not available.")
             st.session_state.last_processed_file_id = current_file_id_proc
@@ -300,37 +264,24 @@ if uploaded_file is not None:
             if st.session_state.processed_data is not None and not st.session_state.processed_data.empty: display_custom_message(f"Successfully processed '{st.session_state.uploaded_file_name}'.", "success", icon="✅")
             elif st.session_state.processed_data is not None and st.session_state.processed_data.empty: display_custom_message(f"Processing of '{st.session_state.uploaded_file_name}' resulted in empty data.", "warning"); st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None
             else: display_custom_message(f"Failed to process '{st.session_state.uploaded_file_name}'.", "error"); st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None
-
 elif st.session_state.get('uploaded_file_name') and uploaded_file is None:
     if st.session_state.processed_data is not None:
         logger.info("File uploader empty. Resetting data states.")
-        keys_to_reset_on_file_removal = [
-            'processed_data', 'filtered_data', 'kpi_results', 'kpi_confidence_intervals', 'uploaded_file_name', 
-            'uploaded_file_bytes_for_mapper', 'last_processed_file_id', 'user_column_mapping', 'column_mapping_confirmed', 
-            'csv_headers_for_mapping', 'last_uploaded_file_for_mapping_id', 'last_applied_filters', 
-            'benchmark_daily_returns', 'last_fetched_benchmark_ticker', 'last_benchmark_data_filter_shape', 
-            'last_kpi_calc_state_id', 'max_drawdown_period_details'
-        ]
-        for key_val in keys_to_reset_on_file_removal: # Renamed loop variable
+        keys_to_reset_on_file_removal = ['processed_data', 'filtered_data', 'kpi_results', 'kpi_confidence_intervals', 'uploaded_file_name', 'uploaded_file_bytes_for_mapper', 'last_processed_file_id', 'user_column_mapping', 'column_mapping_confirmed', 'csv_headers_for_mapping', 'last_uploaded_file_for_mapping_id', 'last_applied_filters', 'benchmark_daily_returns', 'last_fetched_benchmark_ticker', 'last_benchmark_data_filter_shape', 'last_kpi_calc_state_id', 'max_drawdown_period_details']
+        for key_val in keys_to_reset_on_file_removal: 
             if key_val in default_session_state_main_app and key_val != 'sidebar_filters': st.session_state[key_val] = default_session_state_main_app[key_val]
             elif key_val != 'sidebar_filters': st.session_state[key_val] = None
         st.rerun()
 
-# --- Data Filtering Logic ---
 @log_execution_time
-def filter_data_with_profiling(df, filters, col_map):
-    return data_service.filter_data(df, filters, col_map)
-
+def filter_data_with_profiling(df, filters, col_map): return data_service.filter_data(df, filters, col_map)
 if st.session_state.processed_data is not None and not st.session_state.processed_data.empty and st.session_state.sidebar_filters:
     if st.session_state.filtered_data is None or st.session_state.last_applied_filters != st.session_state.sidebar_filters:
-        with st.spinner("Applying filters..."):
-            st.session_state.filtered_data = filter_data_with_profiling(st.session_state.processed_data, st.session_state.sidebar_filters, EXPECTED_COLUMNS)
+        with st.spinner("Applying filters..."): st.session_state.filtered_data = filter_data_with_profiling(st.session_state.processed_data, st.session_state.sidebar_filters, EXPECTED_COLUMNS)
         st.session_state.last_applied_filters = st.session_state.sidebar_filters.copy()
         for key_to_reset in ['kpi_results', 'kpi_confidence_intervals', 'benchmark_daily_returns', 'max_drawdown_period_details']: st.session_state[key_to_reset] = None
 
-# --- Benchmark Data Fetching ---
 if st.session_state.filtered_data is not None and not st.session_state.filtered_data.empty:
-    # ... (benchmark fetching logic as before) ...
     selected_ticker = st.session_state.get('selected_benchmark_ticker')
     if selected_ticker and selected_ticker != "" and selected_ticker.upper() != "NONE":
         refetch_benchmark = False
@@ -344,8 +295,7 @@ if st.session_state.filtered_data is not None and not st.session_state.filtered_
                 dates_for_bm_filtered = pd.to_datetime(st.session_state.filtered_data[date_col_conceptual], errors='coerce').dropna()
                 if not dates_for_bm_filtered.empty:
                     min_d_filtered, max_d_filtered = dates_for_bm_filtered.min(), dates_for_bm_filtered.max()
-                    if pd.notna(min_d_filtered) and pd.notna(max_d_filtered) and (max_d_filtered.date() - min_d_filtered.date()).days >= 0:
-                        min_d_str_to_fetch, max_d_str_to_fetch = min_d_filtered.strftime('%Y-%m-%d'), max_d_filtered.strftime('%Y-%m-%d')
+                    if pd.notna(min_d_filtered) and pd.notna(max_d_filtered) and (max_d_filtered.date() - min_d_filtered.date()).days >= 0: min_d_str_to_fetch, max_d_str_to_fetch = min_d_filtered.strftime('%Y-%m-%d'), max_d_filtered.strftime('%Y-%m-%d')
             if min_d_str_to_fetch and max_d_str_to_fetch:
                 with st.spinner(f"Fetching benchmark: {selected_ticker}..."): st.session_state.benchmark_daily_returns = get_benchmark_data_static(selected_ticker, min_d_str_to_fetch, max_d_str_to_fetch)
                 st.session_state.last_fetched_benchmark_ticker = selected_ticker; st.session_state.last_benchmark_data_filter_shape = st.session_state.filtered_data.shape
@@ -354,29 +304,24 @@ if st.session_state.filtered_data is not None and not st.session_state.filtered_
             st.session_state.kpi_results = None
     elif st.session_state.benchmark_daily_returns is not None: st.session_state.benchmark_daily_returns = None; st.session_state.kpi_results = None
 
-
-# --- KPI Calculation ---
 @log_execution_time
 def get_core_kpis_with_profiling(df, rfr, benchmark_returns, capital): return analysis_service_instance.get_core_kpis(df, rfr, benchmark_returns, capital)
 @log_execution_time
 def get_advanced_drawdown_analysis_with_profiling(equity_series): return analysis_service_instance.get_advanced_drawdown_analysis(equity_series)
 
 if st.session_state.filtered_data is not None and not st.session_state.filtered_data.empty:
-    # ... (KPI calculation logic as before, using current_kpi_state_id) ...
     current_kpi_state_id_parts = [st.session_state.filtered_data.shape, st.session_state.risk_free_rate, st.session_state.initial_capital, st.session_state.selected_benchmark_ticker]
     if st.session_state.benchmark_daily_returns is not None and not st.session_state.benchmark_daily_returns.empty:
         try: current_kpi_state_id_parts.append(pd.util.hash_pandas_object(st.session_state.benchmark_daily_returns.sort_index(), index=True).sum())
         except Exception as e_hash_bm: logger.warning(f"Hashing benchmark failed: {e_hash_bm}. Using shape."); current_kpi_state_id_parts.append(st.session_state.benchmark_daily_returns.shape)
     else: current_kpi_state_id_parts.append(None)
     current_kpi_state_id = tuple(current_kpi_state_id_parts)
-
     if st.session_state.kpi_results is None or st.session_state.last_kpi_calc_state_id != current_kpi_state_id:
         logger.info("Recalculating KPIs...")
         with st.spinner("Calculating metrics..."):
             kpi_res = get_core_kpis_with_profiling(st.session_state.filtered_data, st.session_state.risk_free_rate, st.session_state.benchmark_daily_returns, st.session_state.initial_capital)
             if kpi_res and 'error' not in kpi_res:
                 st.session_state.kpi_results = kpi_res; st.session_state.last_kpi_calc_state_id = current_kpi_state_id
-                # Advanced Drawdown
                 date_col_dd, cum_pnl_col_dd = EXPECTED_COLUMNS.get('date'), 'cumulative_pnl'
                 equity_series_dd = pd.Series(dtype=float)
                 if date_col_dd and cum_pnl_col_dd and date_col_dd in st.session_state.filtered_data and cum_pnl_col_dd in st.session_state.filtered_data:
@@ -387,7 +332,6 @@ if st.session_state.filtered_data is not None and not st.session_state.filtered_
                     st.session_state.max_drawdown_period_details = adv_dd_res.get('max_drawdown_details') if adv_dd_res and 'error' not in adv_dd_res else None
                     if adv_dd_res and 'error' in adv_dd_res: logger.warning(f"Adv DD error: {adv_dd_res['error']}")
                 else: st.session_state.max_drawdown_period_details = None; logger.info(f"Equity series for DD empty or too short ({len(equity_series_dd)}).")
-                # Confidence Intervals
                 pnl_col_ci = EXPECTED_COLUMNS.get('pnl')
                 if pnl_col_ci and pnl_col_ci in st.session_state.filtered_data:
                     pnl_s_ci = st.session_state.filtered_data[pnl_col_ci].dropna()
@@ -402,9 +346,7 @@ elif st.session_state.filtered_data is not None and st.session_state.filtered_da
     if st.session_state.processed_data is not None and not st.session_state.processed_data.empty: display_custom_message("No data matches filters.", "info")
     st.session_state.kpi_results = None; st.session_state.kpi_confidence_intervals = {}; st.session_state.max_drawdown_period_details = None
 
-# --- Welcome Page / Main Content Display Logic ---
 def main_page_layout():
-    # ... (implementation as before) ...
     st.markdown("<div class='welcome-container'>", unsafe_allow_html=True)
     st.markdown("<div class='hero-section'><h1 class='welcome-title'>Trading Dashboard</h1>", unsafe_allow_html=True)
     st.markdown(f"<p class='welcome-subtitle'>Powered by {PAGE_CONFIG_APP_TITLE}</p></div>", unsafe_allow_html=True)
@@ -421,12 +363,8 @@ def main_page_layout():
     else: st.markdown("<p>User guide not found.</p>", unsafe_allow_html=True); logger.warning(f"User Guide not found: {user_guide_page_path}")
     st.markdown("</div></div>", unsafe_allow_html=True)
 
-# --- Page Navigation and Display Logic ---
-if not uploaded_file and st.session_state.processed_data is None:
-    main_page_layout()
-# Other elif conditions for ColumnMapperUI or no-data messages remain as before
+if not uploaded_file and st.session_state.processed_data is None: main_page_layout()
 
 scroll_buttons_component = ScrollButtons()
 scroll_buttons_component.render()
 logger.info(f"App run cycle finished for user '{st.session_state.authenticated_user['username']}'.")
-
