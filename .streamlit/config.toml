@@ -1,0 +1,106 @@
+# .streamlit/config.toml
+
+# Server-related configurations
+# These are generally good defaults for development and Streamlit Cloud deployment.
+[server]
+# When set to true, Streamlit shuts down the server when the browser tab is closed.
+# Useful for local development to free up ports. For Streamlit Cloud, this is managed by the platform.
+# keepAlive = false # Optional, default is false
+
+# If true, the server will watch for changes in source files and rerun the script if changes are detected.
+runOnSave = true
+
+# If true, Streamlit will open a new browser tab when the app is started.
+# Generally true for local, not applicable for Cloud in the same way.
+headless = true # Recommended for Streamlit Cloud as it indicates no browser should be auto-opened by the server process.
+
+# Port for the server to listen on. Streamlit Cloud manages this.
+# port = 8501
+
+# Enable Cross-Origin Resource Sharing (CORS). Default is false.
+# Only set to true if you specifically need to embed your app or parts of it elsewhere and face CORS issues.
+# enableCORS = false
+
+# Enable XSRF protection. Default is true. Recommended to keep true for security.
+# enableXsrfProtection = true
+
+# Maximum message size in megabytes that the websocket can send or receive.
+# Default is 200. Increase if you're sending very large dataframes/objects through websockets.
+# maxMessageSize = 200
+
+
+# Client-facing configurations
+[client]
+# If true, displays a toolbar on the left side of the page with Streamlit's branding.
+# Default is true. Set to false if you want a cleaner look, but users lose access to some Streamlit features like "Clear cache".
+toolbarMode = "minimal" # Options: "developer", "viewer", "minimal", "auto"
+                        # "minimal" hides the "Deploy" button and other developer-centric items for a cleaner production look.
+
+# If true, Streamlit will attempt to gather usage statistics.
+# Default is true. Can be set to false to opt-out.
+# gatherUsageStats = true
+
+
+# Theme configuration
+# This section defines the default visual theme of the application.
+# As per your preference, we'll default to a dark theme.
+# Your style.css will further refine the appearance for both dark and light modes.
+[theme]
+# Base theme. Options: "light", "dark", or "auto" (uses system preference).
+# Setting this to "dark" makes dark mode the default.
+base = "dark"
+
+# Primary accent color for interactive elements.
+# A professional blue that works well on both dark and light backgrounds.
+primaryColor = "#1E88E5" # A vibrant, professional blue
+
+# Background color for the main content area.
+backgroundColor = "#0E1117" # Standard dark theme background (deep charcoal)
+
+# Background color for elements like sidebars, forms, and cards.
+secondaryBackgroundColor = "#262730" # Slightly lighter dark gray for contrast
+
+# Text color.
+textColor = "#FAFAFA" # Off-white/light gray for readability on dark backgrounds
+
+# Font family for all text. Options: "sans serif", "serif", "monospace".
+# "sans serif" is generally a good default for modern applications.
+font = "sans serif"
+
+# You can also specify a custom font if it's web-safe or loaded via CSS.
+# For example, if you load "Inter" via your style.css:
+# font = "Inter"
+
+
+# Runner configurations
+[runner]
+# If true, allows an app to "talk" to a previous version of itself via `st.experimental_rerun`.
+# Default is true.
+# fastReruns = true
+
+# If true, uncaught server exceptions will be displayed in the browser.
+# Default is true. For production, you might consider custom error pages or more controlled error display,
+# but Streamlit's default is quite informative for debugging.
+# showErrorDetails = true
+
+
+# Browser configurations
+[browser]
+# If true, the app will attempt to share the user's location if requested by `st.map`.
+# Default is true.
+# gatherUsageStats = true # This seems to be a duplicate of client.gatherUsageStats, usually managed under [client]
+
+# If true, indicates that the browser is connected to a server that supports server-sent events.
+# Default is true. Generally, leave this as is.
+# serverAddress = "localhost" # This is typically managed by Streamlit or the deployment platform.
+# serverPort = 8501 # Also managed.
+
+# Logger configuration (optional, as you have logger.py)
+# Streamlit has its own logging. You can adjust its level here.
+# Levels: "error", "warning", "info", "debug"
+# [logger]
+# level = "info"
+
+# Deprecation warnings
+# [deprecation]
+# showPyplotGlobalUse = false # Set to false to hide warnings about st.pyplot() without an explicit figure argument, if you manage this.
