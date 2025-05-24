@@ -5,10 +5,10 @@ import pandas as pd
 from typing import Optional, Any, Dict, List
 import yfinance as yf
 import logging
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, ForeignKey # UniqueConstraint not used here yet
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship, scoped_session # relationship not used here yet
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, ForeignKey
+from sqlalchemy.orm import sessionmaker, declarative_base, relationship, scoped_session, Session # <<< ADDED Session IMPORT
 from sqlalchemy.exc import SQLAlchemyError
-import datetime as dt # Use dt alias to avoid conflict
+import datetime as dt 
 
 try:
     from config import APP_TITLE, EXPECTED_COLUMNS, DATABASE_URL 
@@ -36,7 +36,7 @@ logger = logging.getLogger(APP_TITLE)
 try:
     engine = create_engine(DATABASE_URL, echo=False) 
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base = declarative_base() # Define Base here so other models (like User) can import it
+    Base = declarative_base() 
     logger.info(f"Database engine created for URL: {DATABASE_URL}")
 except Exception as e_db_setup:
     logger.critical(f"Failed to create database engine or sessionmaker for URL '{DATABASE_URL}': {e_db_setup}", exc_info=True)
@@ -57,46 +57,19 @@ class TradeNoteDB(Base): # type: ignore
         return f"<TradeNoteDB(id={self.id}, trade_identifier='{self.trade_identifier}', timestamp='{self.note_timestamp.strftime('%Y-%m-%d %H:%M')}')>"
 
 def create_db_tables():
-    """
-    Creates all database tables defined by models inheriting from Base.
-    This function should be called once at application startup.
-    It now imports the User model from AuthService to ensure its table is also created.
-    """
     if Base and engine: 
         try:
-            # Import User model here to ensure it's part of Base.metadata when create_all is called
             from .auth_service import User # pylint: disable=import-outside-toplevel 
-            # This local import ensures User model is registered with Base.metadata
-            # before create_all is called.
             
             Base.metadata.create_all(bind=engine)
             logger.info("Database tables (including User and TradeNoteDB) checked/created successfully.")
         except ImportError:
             logger.error("Failed to import User model from auth_service for table creation. User table might not be created.")
-            # Attempt to create only known tables if User import fails
-            # This part is tricky; ideally, all models are known to Base before this call.
-            # For now, if User can't be imported, only TradeNoteDB (if defined above) would be created.
-            # A better pattern is to have a central db_setup.py that imports all models.
             try:
-                # Try creating tables known to this module's Base at least
-                temp_base_for_partial_create = declarative_base()
-                # Re-declare models known directly in this file if needed for partial creation
-                # For now, this will only create tables defined directly in this file if User import fails.
-                # This is not ideal. The import should succeed.
-                if "trade_notes" not in Base.metadata.tables: # Check if it was already part of the main Base
-                     logger.warning("TradeNoteDB might not be part of the main Base if User import failed and Base was re-declared.")
-                
-                # If User model could not be imported, Base.metadata might not include it.
-                # Calling Base.metadata.create_all() here would only create tables defined
-                # directly in this file and associated with *this* Base instance.
-                # The local import of User is the key to making this work.
                 logger.warning("Attempting to create tables with potentially missing User model due to import error.")
                 Base.metadata.create_all(bind=engine)
-
-
             except Exception as e_partial_create:
                  logger.error(f"Error during partial table creation attempt: {e_partial_create}", exc_info=True)
-
         except Exception as e_create_tables:
             logger.error(f"Error creating database tables: {e_create_tables}", exc_info=True)
             if 'st' in globals() and hasattr(st, 'error'):
@@ -108,35 +81,12 @@ def create_db_tables():
 
 
 @st.cache_resource 
-def get_db_session_cached() -> Optional[Session]: # Return type Session from sqlalchemy.orm
-    """Provides a cached database session factory, returning a new session."""
+def get_db_session_cached() -> Optional[Session]: # <<< CORRECTED TYPE HINT
     if not SessionLocal:
         logger.error("SessionLocal is not initialized. Cannot create DB session.")
         return None
     try:
-        # For st.cache_resource, we typically cache the factory or engine,
-        # and create sessions as needed. Here, SessionLocal is the factory.
-        # To ensure a fresh session for each request that needs one,
-        # it's better to return SessionLocal() directly if not using scoped_session
-        # or manage scoped_session correctly.
-        # If SessionLocal itself is cached, then each call to SessionLocal() gives a new session.
-        # For scoped_session, you'd cache the scoped_session factory.
-        # The current setup with SessionLocal being a sessionmaker is fine.
-        # Let's assume SessionLocal is the configured sessionmaker.
-        
-        # If you want a truly request-scoped session with scoped_session:
-        # db_session_factory = scoped_session(SessionLocal)
-        # return db_session_factory <--- this is what you'd cache
-        # And then use db_session_factory() to get a session, and db_session_factory.remove() to close.
-
-        # For simplicity with st.cache_resource on the getter:
-        # This will cache ONE session instance if not careful.
-        # The intent of caching get_db_session_cached is usually to cache the factory.
-        # Let's adjust to cache the factory and return a new session.
-        # However, SessionLocal IS the factory. So, this is fine.
-        # The key is that the CALLER must close the session.
-
-        db = SessionLocal() # Create a new session from the factory
+        db = SessionLocal() 
         logger.debug("Database session created by get_db_session_cached.")
         return db
     except Exception as e_get_session:
@@ -146,12 +96,8 @@ def get_db_session_cached() -> Optional[Session]: # Return type Session from sql
 class DataService:
     def __init__(self):
         logger.info("DataService initialized.")
-        # Table creation is now more robustly handled at app startup.
-        # create_db_tables() # Call this once, e.g., in app.py after all model imports.
-                           # For now, keeping it here means it's called on DataService instantiation.
 
-    def get_db(self) -> Optional[Session]: 
-        """Gets a database session. Handles session closing."""
+    def get_db(self) -> Optional[Session]: # <<< CORRECTED TYPE HINT
         db = get_db_session_cached()
         if db is None:
             logger.error("Failed to get DB session from cached provider.")
@@ -242,7 +188,8 @@ class DataService:
             logger.error(f"Error adding trade note for '{trade_identifier}': {e_add_note}", exc_info=True)
             return None
         finally:
-            db.close() 
+            if db: # Ensure db is not None before closing
+                db.close() 
 
     def get_trade_notes(
         self,
@@ -276,7 +223,8 @@ class DataService:
             logger.error(f"Error retrieving trade notes: {e_get_notes}", exc_info=True)
             return []
         finally:
-            db.close()
+            if db:
+                db.close()
 
     def update_trade_note(self, note_id: int, new_content: Optional[str] = None, new_tags: Optional[str] = None) -> Optional[TradeNoteDB]:
         db = self.get_db()
@@ -309,7 +257,8 @@ class DataService:
             logger.error(f"Error updating trade note ID {note_id}: {e_update_note}", exc_info=True)
             return None
         finally:
-            db.close()
+            if db:
+                db.close()
 
     def delete_trade_note(self, note_id: int) -> bool:
         db = self.get_db()
@@ -330,10 +279,5 @@ class DataService:
             logger.error(f"Error deleting trade note ID {note_id}: {e_delete_note}", exc_info=True)
             return False
         finally:
-            db.close()
-
-# It's better to call create_db_tables() once at application startup,
-# for example, in app.py after all model definitions are imported.
-# If DataService is instantiated multiple times, this would be called multiple times.
-# For now, we'll assume DataService is a singleton or create_db_tables is idempotent.
-# create_db_tables() # Moved to be called explicitly, e.g., in app.py or main startup.
+            if db:
+                db.close()
