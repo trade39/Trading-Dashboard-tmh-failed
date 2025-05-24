@@ -1,0 +1,966 @@
+/* style.css */
+
+/* --- Root Variables (Dark Theme - Default) --- */
+:root {
+    --primary-color: #5D78FF; 
+    --secondary-color: #7B68EE; 
+    
+    --background-color: #1A1B26; 
+    --card-background-color: #242535; 
+    --section-background-color: #20212F; 
+    --expander-header-bg: #2A2B3A; 
+    --expander-content-bg: var(--card-background-color);
+    
+    --text-color: #E0E1E6; 
+    --text-muted-color: #A0A2B3; 
+    --text-heading-color: #F0F1F6; 
+    
+    --border-color: #3A3C4E; 
+    --input-border-color: #4A4C5E; 
+    --slider-track-color: #4A4C5E; /* For inactive part of slider track */
+    
+    --accent-color: #FF8C00; 
+    --info-accent-color: #17A2B8; /* Using info color for instructions */
+    
+    --success-color: #28a745; 
+    --warning-color: #ffc107; 
+    --error-color: #dc3545; 
+    --info-color: #17a2b8; 
+
+    --font-family-sans-serif: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    --font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+    --border-radius-sm: 0.25rem;
+    --border-radius-md: 0.5rem; 
+    --border-radius-lg: 0.75rem;
+
+    --box-shadow-sm: 0 2px 4px rgba(0,0,0,0.15); 
+    --box-shadow-md: 0 4px 8px rgba(0,0,0,0.2);
+    --box-shadow-lg: 0 6px 12px rgba(0,0,0,0.25);
+    --box-shadow-inset: inset 0 1px 2px rgba(0,0,0,0.1);
+
+    --header-toolbar-background: var(--background-color);
+    --header-toolbar-text-color: var(--text-muted-color);
+    --header-toolbar-hover-text-color: var(--text-color);
+
+    --sidebar-link-hover-bg: var(--primary-color);
+    --sidebar-link-active-bg: var(--primary-color);
+    --sidebar-link-text-color: var(--text-muted-color);
+    --sidebar-link-hover-text-color: #FFFFFF;
+    --sidebar-link-active-text-color: #FFFFFF;
+    --sidebar-icon-color: var(--text-muted-color);
+    --sidebar-icon-hover-color: #FFFFFF;
+    --sidebar-icon-active-color: #FFFFFF;
+
+    --transition-speed: 0.2s;
+    --transition-timing: ease-in-out;
+}
+
+/* --- Light Theme Variables --- */
+[data-theme="light"] {
+    --primary-color: #0062E6; 
+    --secondary-color: #5A6ACF; 
+    
+    --background-color: #F7F8FC; 
+    --card-background-color: #FFFFFF;
+    --section-background-color: #FFFFFF; 
+    --expander-header-bg: #E9ECEF; 
+    --expander-content-bg: var(--card-background-color);
+    
+    --text-color: #212529; 
+    --text-muted-color: #6C757D; 
+    --text-heading-color: #121416;
+
+    --border-color: #DEE2E6; 
+    --input-border-color: #CED4DA;
+    --slider-track-color: #DEE2E6; /* For inactive part of slider track */
+
+    --accent-color: #FF6B00; 
+    --info-accent-color: #17A2B8; /* Consistent info color */
+
+    --box-shadow-sm: 0 2px 4px rgba(0,0,0,0.05); 
+    --box-shadow-md: 0 4px 8px rgba(0,0,0,0.07);
+    --box-shadow-lg: 0 6px 12px rgba(0,0,0,0.1);
+    --box-shadow-inset: inset 0 1px 2px rgba(0,0,0,0.05);
+
+    --header-toolbar-background: var(--card-background-color);
+    --header-toolbar-text-color: var(--text-muted-color);
+    --header-toolbar-hover-text-color: var(--text-color);
+
+    --sidebar-link-hover-bg: var(--primary-color);
+    --sidebar-link-active-bg: var(--primary-color);
+    --sidebar-link-text-color: var(--text-muted-color); 
+    --sidebar-link-hover-text-color: #FFFFFF;
+    --sidebar-link-active-text-color: #FFFFFF;
+    --sidebar-icon-color: var(--text-muted-color);
+    --sidebar-icon-hover-color: #FFFFFF;
+    --sidebar-icon-active-color: #FFFFFF;
+}
+
+/* --- General Body and HTML Styles --- */
+html {
+    background-color: var(--background-color);
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: var(--font-family-sans-serif);
+    color: var(--text-color);
+    background-color: var(--background-color);
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
+    font-size: 16px; 
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- Main Layout Container --- */
+.main .block-container { 
+    padding: 1rem 2rem; 
+}
+
+/* --- Headings --- */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-heading-color);
+    font-weight: 600;
+    margin-top: 1.5em; 
+    margin-bottom: 0.75em; 
+    line-height: 1.3;
+}
+
+h1 { 
+    font-size: 2.25rem; 
+    margin-bottom: 0.5rem; 
+    border-bottom: 2px solid var(--primary-color); 
+    padding-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+h2.section-header { 
+    font-size: 1.75rem; 
+    color: var(--primary-color);
+    margin-top: 2.5rem; 
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+}
+
+/* Subheader for main sections on a page */
+h3.section-subheader { 
+    font-size: 1.375rem; /* Slightly larger for primary subheadings */
+    color: var(--text-heading-color);
+    margin-top: 2.5rem; /* Increased top margin for better separation */
+    margin-bottom: 1.25rem; /* Adjusted bottom margin */
+    font-weight: 500;
+    display: flex; /* For aligning icons if used with st.markdown */
+    align-items: center;
+}
+h3.section-subheader .icon { /* If using <span class="icon">emoji</span> */
+    margin-right: 0.5rem;
+    font-size: 1.1em; /* Adjust icon size relative to text */
+}
+
+
+/* Subheader for components or subsections within expanders/containers */
+h3.component-subheader,
+.performance-section-container h3 { /* Also targets h3 within performance sections */
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-heading-color);
+    margin-top: 0.25rem; 
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Styling for h6 used as plot titles within performance sections */
+.performance-section-container h6 {
+    font-size: 1.05rem;
+    font-weight: 500; 
+    color: var(--text-muted-color); 
+    margin-top: 1.25rem; 
+    margin-bottom: 0.5rem; 
+    padding-bottom: 0;
+    border-bottom: none; 
+}
+
+.page-subtitle { 
+    font-size: 1.15rem;  
+    color: var(--text-muted-color);
+    margin-top: -0.25rem; 
+    margin-bottom: 2.5rem; 
+    font-weight: 300; 
+    max-width: 75ch; 
+    line-height: 1.65; 
+}
+
+/* --- Streamlit Toolbar Styling --- */
+div[data-testid="stToolbar"] {
+    background-color: var(--header-toolbar-background) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    box-shadow: var(--box-shadow-sm);
+    z-index: 999; 
+}
+
+div[data-testid="stToolbar"] button,
+div[data-testid="stToolbar"] a,
+div[data-testid="stToolbar"] label,
+div[data-testid="stToolbar"] svg {
+    color: var(--header-toolbar-text-color) !important;
+    fill: var(--header-toolbar-text-color) !important;
+    transition: color var(--transition-speed) var(--transition-timing), fill var(--transition-speed) var(--transition-timing);
+}
+
+div[data-testid="stToolbar"] button:hover,
+div[data-testid="stToolbar"] a:hover,
+div[data-testid="stToolbar"] label:hover,
+div[data-testid="stToolbar"] svg:hover {
+    color: var(--header-toolbar-hover-text-color) !important;
+    fill: var(--header-toolbar-hover-text-color) !important;
+    background-color: transparent !important;
+}
+
+/* --- Sidebar Styling --- */
+div[data-testid="stSidebar"] {
+    background-color: var(--section-background-color); 
+    border-right: 1px solid var(--border-color);
+    padding: 1rem; 
+    box-shadow: var(--box-shadow-md);
+}
+
+div[data-testid="stSidebarNav"] > ul {
+    padding: 0; margin: 0; list-style: none;
+}
+
+div[data-testid="stSidebarNav"] li > a {
+    display: flex; align-items: center; 
+    padding: 0.75rem 1rem; margin: 0.25rem 0; 
+    border-radius: var(--border-radius-md);
+    text-decoration: none; color: var(--sidebar-link-text-color);
+    font-weight: 500; font-size: 0.95rem;
+    transition: background-color var(--transition-speed) var(--transition-timing), 
+                color var(--transition-speed) var(--transition-timing),
+                box-shadow var(--transition-speed) var(--transition-timing);
+}
+
+div[data-testid="stSidebarNav"] li > a > span:first-child, 
+div[data-testid="stSidebarNav"] li > a > svg { 
+    margin-right: 0.75rem; font-size: 1.1em; 
+    color: var(--sidebar-icon-color); fill: var(--sidebar-icon-color);
+    transition: color var(--transition-speed) var(--transition-timing), 
+                fill var(--transition-speed) var(--transition-timing);
+}
+
+div[data-testid="stSidebarNav"] li > a:hover {
+    background-color: var(--sidebar-link-hover-bg);
+    color: var(--sidebar-link-hover-text-color) !important;
+    box-shadow: var(--box-shadow-sm);
+}
+div[data-testid="stSidebarNav"] li > a:hover > span:first-child,
+div[data-testid="stSidebarNav"] li > a:hover > svg {
+    color: var(--sidebar-icon-hover-color);
+    fill: var(--sidebar-icon-hover-color);
+}
+
+div[data-testid="stSidebarNav"] li > a[aria-current="page"] {
+    background-color: var(--sidebar-link-active-bg);
+    color: var(--sidebar-link-active-text-color) !important;
+    font-weight: 600; box-shadow: var(--box-shadow-md); 
+}
+div[data-testid="stSidebarNav"] li > a[aria-current="page"] > span:first-child,
+div[data-testid="stSidebarNav"] li > a[aria-current="page"] > svg {
+    color: var(--sidebar-icon-active-color);
+    fill: var(--sidebar-icon-active-color);
+}
+
+div[data-testid="stSidebar"] .stButton button { 
+    width: 100%; margin-top: 0.5rem;
+}
+
+/* --- General Button Styling for Streamlit --- */
+div[data-testid="stButton"] > button,
+button[data-testid="baseButton-secondary"] { /* Catches some other buttons */
+    background-color: var(--primary-color) !important; 
+    color: #FFFFFF !important; 
+    border: 1px solid var(--primary-color) !important;
+    padding: 0.6rem 1.25rem;
+    border-radius: var(--border-radius-md);
+    font-weight: 500; font-size: 0.95rem;
+    transition: background-color var(--transition-speed) var(--transition-timing), 
+                border-color var(--transition-speed) var(--transition-timing),
+                transform var(--transition-speed) var(--transition-timing),
+                box-shadow var(--transition-speed) var(--transition-timing);
+    box-shadow: var(--box-shadow-sm); cursor: pointer;
+}
+
+/* Ensure primary form submit buttons are styled consistently */
+div[data-testid="stButton"] button[kind="primary"],
+div[data-testid="stFormSubmitButton"] button[kind="primary"],
+div[data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"] {
+    background-color: var(--primary-color) !important;
+    color: #FFFFFF !important; 
+    border-color: var(--primary-color) !important;
+}
+
+/* Catching Streamlit's default "secondary" form submit or "destructive" buttons */
+div[data-testid="stButton"] > button[kind="secondaryFormSubmit"], 
+div[data-testid="stButton"] > button[style*="background-color: #ff4b4b"], /* Default red */
+div[data-testid="stButton"] > button[style*="background-color: rgb(255, 75, 75)"], /* Default red */
+div[data-testid="stButton"] > button[style*="background-color: #ff4b4b !important"], /* Default red */
+div[data-testid="stButton"] > button[style*="background-color: #ff5555"], /* A common Streamlit red variation */
+div[data-testid="stButton"] > button[style*="background-color: var(--error-color)"] { /* If explicitly set to error color */
+    background-color: var(--primary-color) !important; /* Overriding to primary for consistency */
+    border-color: var(--primary-color) !important; 
+    color: #fff !important;
+}
+
+/* Style for a custom secondary button if you add a class like "secondary-button" */
+div[data-testid="stButton"] > button.secondary-button { 
+    background-color: var(--accent-color) !important;
+    border-color: var(--accent-color) !important;
+}
+div[data-testid="stButton"] > button.secondary-button:hover {
+    background-color: color-mix(in srgb, var(--accent-color) 85%, black 15%) !important;
+    border-color: color-mix(in srgb, var(--accent-color) 85%, black 15%) !important;
+}
+
+
+div[data-testid="stButton"] > button:hover,
+button[data-testid="baseButton-secondary"]:hover,
+div[data-testid="stButton"] button[kind="primary"]:hover,
+div[data-testid="stFormSubmitButton"] button[kind="primary"]:hover,
+div[data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"]:hover,
+div[data-testid="stButton"] > button[kind="secondaryFormSubmit"]:hover,
+div[data-testid="stButton"] > button[style*="background-color: rgb(255, 85, 85)"]:hover, /* Hover state of default red */
+div[data-testid="stButton"] > button[style*="background-color: #ff5555"]:hover, /* Hover state of default red */
+div[data-testid="stButton"] > button[style*="background-color: red"]:hover, /* Generic red */
+div[data-testid="stButton"] > button[style*="background-color: var(--error-color)"]:hover {
+    background-color: color-mix(in srgb, var(--primary-color) 85%, black 15%) !important;
+    border-color: color-mix(in srgb, var(--primary-color) 85%, black 15%) !important;
+    transform: translateY(-2px);
+    box-shadow: var(--box-shadow-md);
+}
+
+div[data-testid="stButton"] > button:active,
+button[data-testid="baseButton-secondary"]:active,
+div[data-testid="stButton"] button[kind="primary"]:active,
+div[data-testid="stFormSubmitButton"] button[kind="primary"]:active,
+div[data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"]:active,
+div[data-testid="stButton"] > button[kind="secondaryFormSubmit"]:active,
+div[data-testid="stButton"] > button[style*="background-color: rgb(255, 85, 85)"]:active,
+div[data-testid="stButton"] > button[style*="background-color: #ff5555"]:active,
+div[data-testid="stButton"] > button[style*="background-color: red"]:active,
+div[data-testid="stButton"] > button[style*="background-color: var(--error-color)"]:active {
+    transform: translateY(0px);
+    box-shadow: var(--box-shadow-sm);
+    background-color: color-mix(in srgb, var(--primary-color) 70%, black 30%) !important;
+    border-color: color-mix(in srgb, var(--primary-color) 70%, black 30%) !important;
+}
+
+/* --- Input Fields (Select, Text Input, etc.) --- */
+div[data-testid="stTextInput"],
+div[data-testid="stNumberInput"],
+div[data-testid="stTextArea"],
+div[data-testid="stDateInput"],
+div[data-testid="stTimeInput"],
+div[data-testid="stSelectbox"],
+div[data-testid="stMultiselect"],
+div[data-testid="stSlider"],
+div[data-testid="stRadio"],
+div[data-testid="stCheckbox"],
+div[data-testid="stColorPicker"],
+div[data-testid="stFileUploader"] {
+    margin-bottom: 1rem; 
+}
+
+div[data-testid="stTextInput"] input,
+div[data-testid="stNumberInput"] input,
+div[data-testid="stTextArea"] textarea,
+div[data-testid="stDateInput"] input, /* For the main input part of date picker */
+div[data-testid="stDateInput"] div[data-baseweb="input"] input, /* More specific for baseweb date input */
+div[data-testid="stTimeInput"] input {
+    background-color: var(--card-background-color) !important;
+    color: var(--text-color) !important;
+    border: 1px solid var(--input-border-color) !important;
+    border-radius: var(--border-radius-md) !important;
+    box-shadow: var(--box-shadow-inset) !important;
+    padding: 0.5rem 0.75rem !important; /* Standardized padding */
+    transition: border-color var(--transition-speed) var(--transition-timing), box-shadow var(--transition-speed) var(--transition-timing);
+}
+
+/* Selectbox main display area */
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:first-child {
+    background-color: var(--card-background-color) !important;
+    border: 1px solid var(--input-border-color) !important;
+    border-radius: var(--border-radius-md) !important;
+    box-shadow: var(--box-shadow-inset) !important;
+    padding: 0.25rem 0.75rem !important; /* Adjusted for vertical alignment */
+    line-height: 1.5; /* Ensure text fits well */
+    min-height: calc(1.5em + 1rem + 2px); /* Matches input field height */
+    display: flex; align-items: center; /* Better vertical alignment */
+    transition: border-color var(--transition-speed) var(--transition-timing), box-shadow var(--transition-speed) var(--transition-timing);
+}
+
+/* Text color within selectbox */
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:first-child > div, /* Selected value text */
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:first-child input { /* Placeholder/input text */
+    color: var(--text-color) !important;
+    background-color: transparent !important; /* Ensure no conflicting background */
+    opacity: 1 !important; /* Ensure text is fully visible */
+    padding: 0 !important; margin: 0 !important; /* Remove internal padding/margin */
+    line-height: inherit !important; /* Inherit line height from parent */
+    font-family: var(--font-family-sans-serif) !important; /* Consistent font */
+    font-size: 1rem !important; /* Consistent font size */
+}
+
+/* Arrow icon in selectbox */
+div[data-testid="stSelectbox"] div[data-baseweb="select"] svg { 
+    fill: var(--text-muted-color) !important; 
+    transition: fill var(--transition-speed) var(--transition-timing);
+}
+div[data-testid="stSelectbox"] div[data-baseweb="select"]:hover svg {
+    fill: var(--text-color) !important; 
+}
+
+
+/* Focus styles for input fields */
+div[data-testid="stTextInput"] input:focus,
+div[data-testid="stNumberInput"] input:focus,
+div[data-testid="stTextArea"] textarea:focus,
+div[data-testid="stDateInput"] input:focus,
+div[data-testid="stDateInput"] div[data-baseweb="input"] input:focus,
+div[data-testid="stTimeInput"] input:focus,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:first-child:focus-within { /* For selectbox when focused */
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--primary-color) 25%, transparent 75%), var(--box-shadow-inset) !important;
+}
+
+/* Placeholder text styling */
+::placeholder { color: var(--text-muted-color); opacity: 1; }
+:-ms-input-placeholder { color: var(--text-muted-color); }
+::-ms-input-placeholder { color: var(--text-muted-color); }
+
+
+/* Dropdown Menu Styling (for st.selectbox, st.multiselect) */
+div[data-baseweb="popover"][id^="baseweb-select-"] div[data-baseweb="menu"],
+div[data-baseweb="popover"][id^="baseweb-multiselect-"] div[data-baseweb="menu"] {
+    background-color: var(--card-background-color) !important;
+    border-radius: var(--border-radius-md) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: var(--box-shadow-lg) !important; 
+    margin-top: 4px !important; /* Small gap from select box */
+    padding: 0.25rem 0 !important; /* Padding around the list of options */
+}
+
+div[data-baseweb="popover"][id^="baseweb-select-"] div[data-baseweb="menu"] ul,
+div[data-baseweb="popover"][id^="baseweb-multiselect-"] div[data-baseweb="menu"] ul {
+    padding: 0 !important; /* Remove default ul padding */
+}
+
+/* Individual dropdown items */
+div[data-baseweb="popover"][id^="baseweb-select-"] div[data-baseweb="menu"] li div[role="option"],
+div[data-baseweb="popover"][id^="baseweb-select-"] div[data-baseweb="menu"] li, /* Fallback for some structures */
+div[data-baseweb="popover"][id^="baseweb-multiselect-"] div[data-baseweb="menu"] li div[role="option"],
+div[data-baseweb="popover"][id^="baseweb-multiselect-"] div[data-baseweb="menu"] li {
+    background-color: transparent !important;
+    color: var(--text-color) !important;
+    padding: 0.6rem 1rem !important; /* Consistent padding */
+    font-size: 0.9rem;
+    border-radius: var(--border-radius-sm); /* Subtle rounding for items */
+    margin: 0.125rem 0.25rem; /* Spacing between items */
+    transition: background-color var(--transition-speed) var(--transition-timing), color var(--transition-speed) var(--transition-timing);
+}
+
+/* Selected item in dropdown */
+div[data-baseweb="popover"][id^="baseweb-select-"] div[data-baseweb="menu"] li div[role="option"][aria-selected="true"],
+div[data-baseweb="popover"][id^="baseweb-select-"] div[data-baseweb="menu"] li[aria-selected="true"],
+div[data-baseweb="popover"][id^="baseweb-multiselect-"] div[data-baseweb="menu"] li div[role="option"][aria-selected="true"],
+div[data-baseweb="popover"][id^="baseweb-multiselect-"] div[data-baseweb="menu"] li[aria-selected="true"] {
+    background-color: color-mix(in srgb, var(--primary-color) 20%, transparent 80%) !important;
+    color: var(--primary-color) !important;
+    font-weight: 500;
+}
+
+/* Hovered item in dropdown */
+div[data-baseweb="popover"][id^="baseweb-select-"] div[data-baseweb="menu"] li div[role="option"]:hover,
+div[data-baseweb="popover"][id^="baseweb-select-"] div[data-baseweb="menu"] li:hover,
+div[data-baseweb="popover"][id^="baseweb-multiselect-"] div[data-baseweb="menu"] li div[role="option"]:hover,
+div[data-baseweb="popover"][id^="baseweb-multiselect-"] div[data-baseweb="menu"] li:hover {
+    background-color: var(--primary-color) !important;
+    color: #FFFFFF !important;
+}
+
+
+/* --- Slider Styling (st.slider) --- */
+div[data-testid="stSlider"] {
+    padding: 0.5rem 0.25rem; /* Padding around the slider component */
+}
+/* Slider track (inactive part) */
+div[data-testid="stSlider"] div[data-baseweb="slider"] > div:nth-child(1) { 
+    background-color: var(--slider-track-color) !important;
+    height: 6px !important; border-radius: var(--border-radius-sm);
+}
+/* Slider track (active part) */
+div[data-testid="stSlider"] div[data-baseweb="slider"] > div:nth-child(2) > div { 
+    background-color: var(--primary-color) !important;
+    height: 6px !important; border-radius: var(--border-radius-sm);
+}
+/* Slider thumb (handle) */
+div[data-testid="stSlider"] div[role="slider"] { 
+    background-color: var(--primary-color) !important;
+    border: 2px solid var(--card-background-color) !important; /* Border to make it pop from track */
+    box-shadow: var(--box-shadow-md) !important;
+    width: 18px !important; height: 18px !important; 
+    border-radius: 50% !important; cursor: pointer;
+    transition: transform var(--transition-speed) var(--transition-timing), box-shadow var(--transition-speed) var(--transition-timing);
+}
+div[data-testid="stSlider"] div[role="slider"]:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary-color) 20%, transparent) !important; /* Subtle glow on hover */
+}
+div[data-testid="stSlider"] div[role="slider"]:focus-visible { /* Focus state for accessibility */
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary-color) 30%, transparent) !important;
+    outline: none;
+}
+
+/* --- Expander Styling --- */
+/* For specific context like column mapper, if needed */
+.column-mapper-container h6 { 
+    font-size: 1.05rem; font-weight: 600; 
+    color: var(--text-heading-color);
+    margin-top: 1.25rem; margin-bottom: 0.5rem; 
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--input-border-color); 
+}
+.column-mapper-container h6 .critical-marker { 
+    color: var(--error-color); font-weight: bold; margin-left: 0.25rem;
+}
+
+/* General Expander Header */
+div[data-testid="stExpander"] summary {
+    font-size: 1rem; font-weight: 500;
+    color: var(--text-heading-color);
+    background-color: var(--expander-header-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    padding: 0.75rem 1rem; 
+    transition: background-color var(--transition-speed) var(--transition-timing);
+    margin-bottom: 0; /* Remove default margin if any, control spacing with expander itself */
+}
+div[data-testid="stExpander"] summary:hover {
+    background-color: color-mix(in srgb, var(--expander-header-bg) 90%, var(--text-color) 5%);
+}
+/* When expander is open, adjust summary border radius */
+div[data-testid="stExpander"][open] summary { 
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+/* Expander Content Area */
+div[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+    padding: 1.25rem; /* Default padding for content */
+    background-color: var(--expander-content-bg);
+    border: 1px solid var(--border-color);
+    border-top: none; /* Top border is handled by summary */
+    border-radius: 0 0 var(--border-radius-md) var(--border-radius-md); 
+}
+/* Add margin below each expander for separation */
+div[data-testid="stExpander"] {
+    margin-bottom: 1.5rem; 
+}
+
+
+/* --- Card Styling (Generic Custom Card) --- */
+.custom-card { 
+    background-color: var(--card-background-color);
+    padding: 1.5rem;
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--box-shadow-md);
+    margin-bottom: 1.5rem;
+}
+
+/* --- AI & ML Page Specific Styles (Example) --- */
+.ai-ml-task-container { 
+    background-color: var(--card-background-color);
+    padding: 2rem; border-radius: var(--border-radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--box-shadow-md); margin-bottom: 2.5rem;
+}
+.ai-ml-task-container.placeholder-section {
+    border-left: 4px solid var(--secondary-color); 
+    background-color: color-mix(in srgb, var(--card-background-color) 95%, var(--secondary-color) 5%); 
+}
+.ai-ml-task-container div[data-testid="stExpander"] summary { 
+    font-size: 1.15rem; padding: 1rem 1.5rem;
+}
+.ai-ml-task-container div[data-testid="stForm"] .stCaption { 
+    font-size: 0.9rem; color: var(--text-muted-color);
+    margin-top: -0.25rem; margin-bottom: 1rem; 
+}
+.ai-ml-task-container div[data-testid="stForm"] h6 {
+    font-size: 1rem; color: var(--text-heading-color);
+    margin-top: 1.25rem; margin-bottom: 0.75rem;
+    font-weight: 500;
+}
+.ai-ml-task-container div[data-testid="stCodeBlock"] {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    background-color: var(--background-color); 
+    margin-top: 1rem;
+}
+.ai-ml-task-container div[data-testid="stCodeBlock"] pre {
+    padding: 1rem; font-size: 0.875rem; 
+}
+
+/* --- Welcome Page Styles (Example) --- */
+.welcome-container {
+    background-color: transparent; border: none;
+    box-shadow: none; max-width: 100%; 
+    padding: 0.5rem 2rem 2rem 2rem; margin: 0 auto; 
+}
+.hero-section { padding-top: 0; }
+.welcome-title { 
+    font-size: 2.5rem; font-weight: 700;
+    margin-top: 0.75rem; margin-bottom: 0.25rem; 
+    color: var(--primary-color); text-align: center;
+    border-bottom: none; 
+}
+.welcome-subtitle { 
+    font-size: 0.9rem; font-weight: 400;
+    color: var(--text-muted-color); text-align: center;
+    margin-top: 0; margin-bottom: 1.5rem; 
+}
+.hero-section .tagline { 
+    font-size: 1.25rem; font-weight: 300;
+    margin-bottom: 2rem; color: var(--text-muted-color);
+    text-align: center; max-width: 60ch;
+    margin-left: auto; margin-right: auto;
+}
+.feature-item { 
+    padding: 1rem 0.5rem; text-align: center; 
+}
+.feature-item h4 {
+    color: var(--primary-color);
+    margin-top: 0; margin-bottom: 0.75rem; 
+    font-size: 1.2rem; font-weight: 600;
+}
+.feature-item p {
+    font-size: 0.95rem; line-height: 1.6;
+    color: var(--text-color); max-width: 30ch; 
+    margin-left: auto; margin-right: auto;
+}
+
+/* --- Custom Scrollbar --- */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: var(--background-color); border-radius: var(--border-radius-sm); }
+::-webkit-scrollbar-thumb { background-color: var(--primary-color); border-radius: var(--border-radius-md); border: 3px solid var(--background-color); }
+::-webkit-scrollbar-thumb:hover { background-color: var(--secondary-color); }
+
+/* --- Responsive Design Adjustments --- */
+@media (max-width: 992px) { /* Tablet */
+    .main .block-container { padding: 1rem 1.5rem; } 
+    h1 { font-size: 2rem; }
+    h2.section-header { font-size: 1.6rem; }
+    h3.section-subheader { font-size: 1.25rem; } /* Adjusted for tablet */
+    .page-subtitle { font-size: 1rem; } 
+    .welcome-container { padding: 0.5rem 1.5rem 1.5rem 1.5rem; margin: 0 auto; } 
+    .welcome-title { font-size: 2.25rem; margin-top: 0.5rem; } 
+    .welcome-subtitle { font-size: 0.85rem; margin-bottom: 1.25rem; } 
+    .hero-section .tagline { font-size: 1.15rem; }
+}
+
+@media (max-width: 767px) { /* Mobile */
+    .main .block-container { padding: 0.5rem 1rem; } 
+    h1 { font-size: 1.75rem; margin-bottom: 0.75rem; }
+    h2.section-header { font-size: 1.4rem; margin-bottom: 1rem; }
+    h3.section-subheader { font-size: 1.15rem; } /* Adjusted for mobile */
+    .page-subtitle { font-size: 0.95rem; } 
+    
+    .ai-ml-task-container { padding: 1.25rem; }
+    .ai-ml-task-container div[data-testid="stExpander"] summary { font-size: 1rem; padding: 0.75rem 1rem;}
+    .ai-ml-task-container div[data-testid="stExpander"] [data-testid="stExpanderDetails"] { padding: 1rem; }
+
+    .welcome-container { padding: 0.5rem 1rem 1rem 1rem; margin: 0 auto; } 
+    .welcome-title { font-size: 2rem; margin-top: 0.25rem; } 
+    .welcome-subtitle { font-size: 0.8rem; margin-bottom: 1rem; } 
+    .hero-section .tagline { font-size: 1.05rem; }
+    .feature-item { margin-bottom: 1.5rem; }
+    .feature-item:last-child { margin-bottom: 0; }
+    .feature-item h4 { font-size: 1.15rem; }
+}
+
+/* --- Custom Message Box Styling --- */
+.custom-message-box {
+    padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+    border-radius: var(--border-radius-md);
+    border-width: 1px; border-style: solid;
+    display: flex; align-items: center;
+    box-shadow: var(--box-shadow-sm);
+}
+.custom-message-box-icon { margin-right: 0.75rem; font-size: 1.25rem; }
+.custom-message-box.success { background-color: color-mix(in srgb, var(--success-color) 15%, transparent); border-color: var(--success-color); color: var(--success-color); }
+.custom-message-box.warning { background-color: color-mix(in srgb, var(--warning-color) 15%, transparent); border-color: var(--warning-color); color: color-mix(in srgb, var(--warning-color) 80%, black); }
+[data-theme="light"] .custom-message-box.warning { color: color-mix(in srgb, var(--warning-color) 90%, black); } 
+.custom-message-box.error   { background-color: color-mix(in srgb, var(--error-color) 15%, transparent); border-color: var(--error-color); color: var(--error-color); }
+.custom-message-box.info    { background-color: color-mix(in srgb, var(--info-color) 15%, transparent); border-color: var(--info-color); color: var(--info-color); }
+
+/* --- Column Mapper Specific Styles --- */
+.column-mapper-container .mapper-instructions {
+    font-size: 0.95rem; color: var(--text-color); 
+    background-color: color-mix(in srgb, var(--info-accent-color) 10%, var(--section-background-color) 90%); 
+    padding: 1rem 1.25rem; border-radius: var(--border-radius-md);
+    border-left: 4px solid var(--info-accent-color); 
+    margin-top: 1.5rem; margin-bottom: 2rem; 
+    line-height: 1.6; box-shadow: var(--box-shadow-sm);
+    display: flex; align-items: flex-start; 
+}
+.column-mapper-container .mapper-instructions .instruction-icon {
+    font-size: 1.2rem; margin-right: 0.75rem; 
+    color: var(--info-accent-color); line-height: 1.6; 
+}
+.column-mapper-container .mapper-instructions strong { 
+    color: var(--error-color); font-weight: bold;
+}
+.column-mapper-container .type-mismatch-warning {
+    color: var(--warning-color) !important; font-size: 0.8rem;
+    display: block; margin-top: 0.25rem;
+}
+.column-mapper-container hr.styled-hr,
+.performance-section-container hr, /* Style for <hr> used via st.markdown("<hr>") */
+hr.styled-hr { /* General styled HR */
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 2rem 0; /* Consistent vertical spacing for dividers */
+}
+
+
+.data-preview-container {
+    background-color: var(--section-background-color); 
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg); 
+    padding: 1.25rem; margin-top: 1rem; margin-bottom: 1.5rem; 
+    box-shadow: var(--box-shadow-sm); 
+}
+.data-preview-container .data-preview-title { 
+    font-size: 1.1rem; font-weight: 600; 
+    color: var(--text-heading-color);
+    margin-top: 0; margin-bottom: 1rem; 
+    padding-bottom: 0.65rem; 
+    border-bottom: 1px solid var(--input-border-color); 
+    line-height: 1.4; 
+}
+.data-preview-container div[data-testid="stDataFrame"] {
+    margin-top: 0.25rem; 
+}
+.data-preview-container .data-preview-placeholder {
+    font-size: 0.95rem; color: var(--text-muted-color);
+    padding: 1.5rem 1rem; text-align: center;
+    border: 1px dashed var(--input-border-color); 
+    border-radius: var(--border-radius-md); 
+    background-color: color-mix(in srgb, var(--section-background-color) 70%, var(--background-color) 30%); 
+    margin-top: 0.5rem; 
+}
+.column-mapper-container label.selectbox-label { 
+    font-size: 1rem; color: var(--text-color);
+    display: block; margin-bottom: 0.25rem; padding-left: 0; 
+}
+.column-mapper-container label.selectbox-label .critical-marker,
+.column-mapper-container h6 .critical-marker { 
+    color: var(--error-color) !important; 
+    font-weight: bold; margin-left: 0.15rem; 
+}
+
+/* --- Readability Enhancements --- */
+.main .block-container p,
+.main .block-container li,
+div[data-testid="stExpander"] [data-testid="stExpanderDetails"] p,
+div[data-testid="stExpander"] [data-testid="stExpanderDetails"] li,
+.custom-card p, .custom-card li,
+.performance-section-container p { /* Ensure paragraphs in perf sections also get this */
+    font-size: 1.08rem; line-height: 1.7;  
+}
+/* For text directly within st.markdown that might not be in a <p> but is styled like one by Streamlit */
+.main .block-container div[style*='border-bottom: 1px solid var(--input-border-color);'] { /* Example of a generic Streamlit markdown element style */
+    font-size: 1.02rem; line-height: 1.65;
+}
+.main .block-container div[style*='border-bottom: 1px solid var(--input-border-color);'] code,
+.main .block-container div[style*='border-bottom: 1px solid var(--input-border-color);'] strong {
+    font-size: 1.03rem; 
+}
+.main .block-container div[style*='border-bottom: 1px solid var(--input-border-color);'] em {
+    font-size: 1rem; 
+}
+.custom-message-box, .custom-message-box p, .custom-message-box ul li {
+    font-size: 1.02rem; line-height: 1.65;
+}
+.custom-message-box strong { font-size: 1.03rem; }
+.critical-marker { font-size: inherit; } /* Ensure critical marker inherits font size */
+
+@media (max-width: 767px) { /* Mobile Readability */
+    .main .block-container p, .main .block-container li,
+    div[data-testid="stExpander"] [data-testid="stExpanderDetails"] p,
+    div[data-testid="stExpander"] [data-testid="stExpanderDetails"] li,
+    .custom-card p, .custom-card li,
+    .performance-section-container p {
+        font-size: 1.02rem; line-height: 1.65;
+    }
+    .custom-message-box, .custom-message-box p, .custom-message-box ul li {
+        font-size: 0.98rem; line-height: 1.6;
+    }
+    .page-subtitle { font-size: 1.05rem; } /* Slightly larger for better readability on mobile */
+}
+
+/* --- Radio Button Styling --- */
+div[data-testid="stRadio"] div[role="radiogroup"] div[data-baseweb="radio"] > div:first-child { /* Radio button outer circle */
+    border-color: var(--input-border-color) !important; 
+    background-color: var(--card-background-color) !important; 
+}
+div[data-testid="stRadio"] div[role="radiogroup"] div[data-baseweb="radio"] input:checked + div > div:last-child { /* Radio button inner circle (checked) */
+    background-color: var(--primary-color) !important; 
+}
+div[data-testid="stRadio"] div[role="radiogroup"] div[data-baseweb="radio"] input:checked + div { /* Radio button outer circle (checked) */
+    border-color: var(--primary-color) !important; 
+    background-color: var(--card-background-color) !important; 
+}
+/* Hover effect for unchecked radio buttons */
+div[data-testid="stRadio"] div[role="radiogroup"] div[data-baseweb="radio"]:not(:has(input:checked)):hover > div:first-child {
+    border-color: var(--primary-color) !important; 
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 20%, transparent); 
+}
+div[data-testid="stRadio"] label { color: var(--text-color) !important; } /* Radio button label text */
+/* Focus state for radio buttons */
+div[data-testid="stRadio"] div[role="radiogroup"] div[data-baseweb="radio"] input:focus-visible + div {
+    outline: 2px solid var(--primary-color) !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 30%, transparent) !important;
+}
+
+
+/* --- Performance Page Specific Styling --- */
+/* This class can be applied to st.container() to group sections */
+.performance-section-container {
+    background-color: var(--card-background-color);
+    padding: 1.75rem; 
+    border-radius: var(--border-radius-lg); 
+    margin-bottom: 2rem; 
+    box-shadow: var(--box-shadow-md); 
+    border: 1px solid var(--border-color); 
+}
+
+/* Styling for st.metric, effectively the .kpi-metric-card */
+/* This selector targets Streamlit's metric component. */
+div[data-testid="stMetric"] {
+    background-color: var(--section-background-color); 
+    padding: 1rem 1.25rem;
+    border-radius: var(--border-radius-md);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--box-shadow-sm);
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    margin-bottom: 1rem; /* Increased margin for better vertical spacing */
+}
+div[data-testid="stMetric"]:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--box-shadow-md);
+}
+div[data-testid="stMetric"] label { /* Metric label */
+    font-size: 0.9rem; font-weight: 500;
+    color: var(--text-muted-color);
+    margin-bottom: 0.25rem; 
+}
+div[data-testid="stMetric"] div[data-testid="stMetricValue"] { /* Metric value */
+    font-size: 1.75rem; font-weight: 600;
+    color: var(--text-heading-color);
+    line-height: 1.2;
+}
+div[data-testid="stMetric"] div[data-testid="stMetricDelta"] { /* Metric delta (if present) */
+    font-size: 0.85rem; font-weight: 500;
+}
+
+/* More specific styling for H3 if it's directly inside a performance section container's column structure */
+/* Example: .performance-section-container > div > div > div > div > h3 */
+/* This is highly dependent on Streamlit's generated HTML structure for columns. */
+/* The generic h3.component-subheader or h3.section-subheader should cover most cases. */
+/* If more specific targeting is needed, inspect the element and adjust. */
+/* For instance, if st.columns is used within .performance-section-container: */
+.performance-section-container .stApp > div > div > div > div > h3 { 
+    font-size: 1.45rem !important; 
+    color: var(--primary-color) !important; 
+    margin-top: 0.25rem !important; 
+    margin-bottom: 1.25rem !important; 
+    padding-bottom: 0.6rem !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+.performance-section-container .stApp > div > div > div > div > p { 
+    font-size: 0.95rem !important;
+    color: var(--text-muted-color) !important;
+    margin-top: -0.75rem !important; 
+    margin-bottom: 1.5rem !important; 
+    line-height: 1.6 !important;
+}
+
+
+/* --- NEW: Specific Block Styling for Performance Page (CSS Class Strategy) --- */
+/* These classes are intended to be used with st.container(class_name="...") */
+/* They provide examples of how to structure CSS for maintainability. */
+
+.kpi-metrics-block {
+    /* Styles for a block specifically containing st.metric elements if wrapped in a container */
+    /* Example: Add some vertical padding if needed around the group of KPIs */
+    /* padding: 0.5rem 0; */ 
+    margin-bottom: 1rem; /* Add some space after the KPI block */
+}
+
+.charts-grid {
+    /* Styles for an area containing multiple charts, often in columns */
+    /* margin-top: 1rem; */ /* Space above the chart grid */
+    /* padding: 1rem; */ /* Padding within the chart grid area */
+    /* background-color: color-mix(in srgb, var(--background-color) 97%, var(--card-background-color) 3%); */ /* Subtle different background */
+    /* border: 1px dashed var(--input-border-color); */ /* Example border */
+    /* border-radius: var(--border-radius-md); */
+}
+
+.calendar-display-area {
+    /* Styles specific to the P&L calendar display block */
+    margin-top: 1rem; /* Space before the calendar */
+    /* padding: 1rem; */
+    /* background-color: color-mix(in srgb, var(--background-color) 97%, var(--card-background-color) 3%); */
+    /* border-radius: var(--border-radius-md); */
+}
+
+/* Styling for content INSIDE st.expander if wrapped with these classes */
+.controls-expander-content {
+    /* Styles for the content INSIDE st.expander for controls */
+    padding: 0.75rem; /* Add some padding inside control expanders */
+    /* background-color: color-mix(in srgb, var(--expander-content-bg) 95%, var(--background-color) 5%); */
+    /* border-top: 1px solid var(--border-color); */ /* If expander header has no bottom border */
+}
+
+.view-data-expander-content {
+    /* Styles for the content INSIDE st.expander for "View Data" */
+    padding: 0.5rem; /* Padding around the dataframe */
+}
+
+.view-data-expander-content div[data-testid="stDataFrame"] {
+    /* More specific targeting for dataframes within .view-data-expander-content */
+    /* For example, to control max-height and scrolling for the dataframe */
+    /* max-height: 350px; */
+    /* overflow-y: auto; */
+    /* border: 1px solid var(--input-border-color); */
+    /* border-radius: var(--border-radius-sm); */
+}
+
+/*
+  Note on expander padding:
+  Streamlit's div[data-testid="stExpanderDetails"] already has padding (1.25rem).
+  If you add padding to an inner div (like .controls-expander-content),
+  the paddings will combine. This is usually fine.
+  If you need to override the expander's default padding for specific cases,
+  you could target it like:
+  div[data-testid="stExpander"] [data-testid="stExpanderDetails"].specific-expander-class {
+     padding: 0 !important;
+  }
+  And then control all padding via your inner .controls-expander-content div.
+  However, it's often simpler to work with the default expander padding.
+*/
