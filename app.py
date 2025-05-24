@@ -1,4 +1,4 @@
-# app.py - Main Entry Point for Multi-Page Trading Performance Dashboard
+# app.py - Main Entry Point
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -96,7 +96,8 @@ if 'authenticated_user' not in st.session_state: st.session_state.authenticated_
 if 'auth_flow_page' not in st.session_state: st.session_state.auth_flow_page = 'login'
 if 'selected_user_file_id' not in st.session_state: st.session_state.selected_user_file_id = None
 if 'current_file_content_for_processing' not in st.session_state: st.session_state.current_file_content_for_processing = None
-if 'file_to_save' not in st.session_state: st.session_state.file_to_save = None
+if 'file_to_save_content' not in st.session_state: st.session_state.file_to_save_content = None # Store content bytes
+if 'file_to_save_name' not in st.session_state: st.session_state.file_to_save_name = None # Store original name
 
 def display_login_form():
     with st.container():
@@ -156,46 +157,28 @@ if st.session_state.authenticated_user is None:
     else: st.session_state.auth_flow_page = 'login'; display_login_form()
     st.stop()
 
-# --- USER IS AUTHENTICATED ---
 current_user_id = st.session_state.authenticated_user['user_id']
 current_username = st.session_state.authenticated_user['username']
 
-# Initialize main app session state
-# CORRECTED DEFINITION of default_session_state_main_app
 default_session_state_main_app = {
-    'app_initialized': True, 
-    'processed_data': None, 
-    'filtered_data': None,
-    'kpi_results': None, 
-    'kpi_confidence_intervals': {},
-    'risk_free_rate': RISK_FREE_RATE, 
-    'uploaded_file_name': None,
-    'uploaded_file_bytes_for_mapper': None, 
-    'last_processed_file_id': None,
-    'user_column_mapping': None, 
-    'column_mapping_confirmed': False,
-    'csv_headers_for_mapping': None, 
-    'last_uploaded_file_for_mapping_id': None,
-    'last_applied_filters': None, 
-    'sidebar_filters': None, 
-    # 'active_tab': "📈 Overview", # This might be managed by Streamlit's multipage logic if pages are in pages/ dir
+    'app_initialized': True, 'processed_data': None, 'filtered_data': None,
+    'kpi_results': None, 'kpi_confidence_intervals': {},
+    'risk_free_rate': RISK_FREE_RATE, 'uploaded_file_name': None,
+    'uploaded_file_bytes_for_mapper': None, 'last_processed_file_id': None,
+    'user_column_mapping': None, 'column_mapping_confirmed': False,
+    'csv_headers_for_mapping': None, 'last_uploaded_file_for_mapping_id': None,
+    'last_applied_filters': None, 'sidebar_filters': None, 
     'selected_benchmark_ticker': DEFAULT_BENCHMARK_TICKER,
-    'benchmark_daily_returns': None, 
-    'initial_capital': 100000.0,
-    'last_fetched_benchmark_ticker': None, 
-    'last_benchmark_data_filter_shape': None,
-    'last_kpi_calc_state_id': None, 
-    'max_drawdown_period_details': None
+    'benchmark_daily_returns': None, 'initial_capital': 100000.0,
+    'last_fetched_benchmark_ticker': None, 'last_benchmark_data_filter_shape': None,
+    'last_kpi_calc_state_id': None, 'max_drawdown_period_details': None
 }
 default_session_state_main_app['selected_benchmark_display_name'] = next(
     (name for name, ticker_val in AVAILABLE_BENCHMARKS.items() if ticker_val == default_session_state_main_app['selected_benchmark_ticker']), "None"
 )
-
 for key, value in default_session_state_main_app.items():
-    if key not in st.session_state: 
-        st.session_state[key] = value
+    if key not in st.session_state: st.session_state[key] = value
 
-# Sidebar for authenticated user
 LOGO_PATH_SIDEBAR = "assets/Trading_Mastery_Hub_600x600.png"
 logo_base64 = None
 if os.path.exists(LOGO_PATH_SIDEBAR):
@@ -238,20 +221,38 @@ selected_file_label = st.sidebar.selectbox(
 )
 selected_file_id_from_dropdown = file_options.get(selected_file_label)
 
+# --- MODIFIED FILE UPLOAD AND SAVE LOGIC ---
 if selected_file_id_from_dropdown == "upload_new":
     newly_uploaded_file_object = st.sidebar.file_uploader(
-        "Upload New Trading Journal (CSV)", type=["csv"], key="app_wide_file_uploader_auth_v3",
+        "Upload New Trading Journal (CSV)", type=["csv"], key="app_wide_file_uploader_auth_v3_trigger", # Changed key for uploader
         help="Your uploaded CSV will be saved to your account."
     )
-    if newly_uploaded_file_object:
-        st.session_state.file_to_save = newly_uploaded_file_object
-        st.rerun() 
+    if newly_uploaded_file_object is not None and st.session_state.get('last_uploaded_raw_file_id') != id(newly_uploaded_file_object):
+        # A new file has been uploaded
+        st.session_state.file_to_save_content = newly_uploaded_file_object.getvalue()
+        st.session_state.file_to_save_name = newly_uploaded_file_object.name
+        st.session_state.last_uploaded_raw_file_id = id(newly_uploaded_file_object) # Track the raw object
+        # Trigger a rerun to process the save outside the uploader's direct callback chain
+        st.rerun()
 
-if st.session_state.get('file_to_save') is not None:
-    file_to_process_save = st.session_state.file_to_save
-    st.session_state.file_to_save = None 
-    with st.sidebar.spinner("Saving your file..."):
-        saved_user_file_record = data_service.save_user_file(current_user_id, file_to_process_save)
+# Process pending file save if content and name are in session state
+if st.session_state.get('file_to_save_content') is not None and st.session_state.get('file_to_save_name') is not None:
+    file_content_to_save = st.session_state.file_to_save_content
+    original_name_to_save = st.session_state.file_to_save_name
+    
+    # Clear them immediately to prevent reprocessing on next rerun if save fails or for other reasons
+    st.session_state.file_to_save_content = None
+    st.session_state.file_to_save_name = None
+    st.session_state.last_uploaded_raw_file_id = None # Reset tracker
+
+    # Create a temporary UploadedFile-like object for the service if needed, or pass bytes and name
+    # For simplicity, let's assume save_user_file can handle bytes and name, or adapt it.
+    # We'll create a BytesIO object and set its name attribute.
+    temp_uploaded_file_for_service = BytesIO(file_content_to_save)
+    temp_uploaded_file_for_service.name = original_name_to_save # Set the name attribute
+
+    with st.sidebar.spinner(f"Saving '{original_name_to_save}'..."):
+        saved_user_file_record = data_service.save_user_file(current_user_id, temp_uploaded_file_for_service)
         if saved_user_file_record:
             st.sidebar.success(f"File '{saved_user_file_record.original_file_name}' saved!")
             st.session_state.selected_user_file_id = saved_user_file_record.id
@@ -260,9 +261,10 @@ if st.session_state.get('file_to_save') is not None:
             st.session_state.column_mapping_confirmed = False 
             st.session_state.uploaded_file_name = saved_user_file_record.original_file_name
             st.sidebar.info("File saved. It will be loaded for analysis.")
-            st.rerun()
+            st.rerun() 
         else:
-            st.sidebar.error("Could not save the file. Please try again.")
+            st.sidebar.error(f"Could not save the file '{original_name_to_save}'. Please try again.")
+# --- END OF MODIFIED FILE UPLOAD AND SAVE LOGIC ---
 
 if selected_file_id_from_dropdown != "upload_new" and selected_file_id_from_dropdown is not None:
     if st.session_state.selected_user_file_id != selected_file_id_from_dropdown or st.session_state.current_file_content_for_processing is None:
@@ -298,6 +300,7 @@ current_sidebar_filters = sidebar_manager.render_sidebar_controls()
 st.session_state.sidebar_filters = current_sidebar_filters
 
 if current_sidebar_filters:
+    # ... (filter update logic as before) ...
     rfr_from_sidebar = current_sidebar_filters.get('risk_free_rate', RISK_FREE_RATE)
     if st.session_state.risk_free_rate != rfr_from_sidebar: st.session_state.risk_free_rate = rfr_from_sidebar; st.session_state.kpi_results = None
     benchmark_ticker_from_sidebar = current_sidebar_filters.get('selected_benchmark_ticker', "")
@@ -308,12 +311,14 @@ if current_sidebar_filters:
     initial_capital_from_sidebar = current_sidebar_filters.get('initial_capital', 100000.0)
     if st.session_state.initial_capital != initial_capital_from_sidebar: st.session_state.initial_capital = initial_capital_from_sidebar; st.session_state.kpi_results = None
 
+# --- Data Processing Pipeline ---
 active_file_content_to_process = st.session_state.get('current_file_content_for_processing')
 active_file_name_for_processing = st.session_state.get('uploaded_file_name')
 active_processing_file_identifier = st.session_state.selected_user_file_id if st.session_state.selected_user_file_id else active_file_name_for_processing
 
 @log_execution_time
 def get_and_process_data_with_profiling(file_obj, mapping, name):
+    # ... (implementation as before) ...
     if hasattr(file_obj, 'getvalue') and not isinstance(file_obj, BytesIO):
         file_bytes_io = BytesIO(file_obj.getvalue()); file_bytes_io.seek(0)
         return data_service.get_processed_trading_data(file_bytes_io, user_column_mapping=mapping, original_file_name=name)
@@ -323,6 +328,7 @@ def get_and_process_data_with_profiling(file_obj, mapping, name):
     logger.error("get_and_process_data_with_profiling: file_obj is not compatible."); return None
 
 if active_file_content_to_process and active_file_name_for_processing:
+    # ... (column mapping and data processing logic as before) ...
     if st.session_state.last_uploaded_file_for_mapping_id != active_processing_file_identifier or not st.session_state.column_mapping_confirmed:
         logger.info(f"File '{active_file_name_for_processing}' (ID: {active_processing_file_identifier}) needs mapping.")
         st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None
@@ -344,7 +350,7 @@ if active_file_content_to_process and active_file_name_for_processing:
         else: st.stop()
     if st.session_state.column_mapping_confirmed and st.session_state.user_column_mapping:
         if st.session_state.last_processed_file_id != active_processing_file_identifier or st.session_state.processed_data is None:
-            with st.spinner(f"Processing '{active_file_name_for_processing}'..."):
+            with st.spinner(f"Processing '{active_file_name_for_processing}'..."): # This spinner is for data processing, not file saving
                 active_file_content_to_process.seek(0)
                 st.session_state.processed_data = get_and_process_data_with_profiling(active_file_content_to_process, st.session_state.user_column_mapping, active_file_name_for_processing)
             st.session_state.last_processed_file_id = active_processing_file_identifier
@@ -360,6 +366,8 @@ elif not active_file_content_to_process and st.session_state.authenticated_user:
         for key_val in keys_to_clear_no_active:
             if key_val in st.session_state: st.session_state[key_val] = None
 
+# --- Data Filtering, Benchmark Fetching, KPI Calculation (as before) ---
+# ... (This entire section remains the same as it operates on st.session_state.processed_data / filtered_data) ...
 @log_execution_time
 def filter_data_with_profiling(df, filters, col_map): return data_service.filter_data(df, filters, col_map)
 
@@ -406,7 +414,7 @@ if st.session_state.filtered_data is not None and not st.session_state.filtered_
     current_kpi_state_id = tuple(current_kpi_state_id_parts)
     if st.session_state.kpi_results is None or st.session_state.last_kpi_calc_state_id != current_kpi_state_id:
         logger.info("Recalculating KPIs...")
-        with st.spinner("Calculating metrics..."):
+        with st.spinner("Calculating metrics..."): # This spinner is for KPI calculation
             kpi_res = get_core_kpis_with_profiling(st.session_state.filtered_data, st.session_state.risk_free_rate, st.session_state.benchmark_daily_returns, st.session_state.initial_capital)
             if kpi_res and 'error' not in kpi_res:
                 st.session_state.kpi_results = kpi_res; st.session_state.last_kpi_calc_state_id = current_kpi_state_id
@@ -433,7 +441,9 @@ elif st.session_state.filtered_data is not None and st.session_state.filtered_da
     if st.session_state.processed_data is not None and not st.session_state.processed_data.empty: display_custom_message("No data matches filters.", "info")
     st.session_state.kpi_results = None; st.session_state.kpi_confidence_intervals = {}; st.session_state.max_drawdown_period_details = None
 
+# --- Welcome Page / Main Content Display Logic ---
 def main_page_layout():
+    # ... (implementation as before) ...
     st.markdown("<div class='welcome-container'>", unsafe_allow_html=True)
     st.markdown("<div class='hero-section'><h1 class='welcome-title'>Trading Dashboard</h1>", unsafe_allow_html=True)
     st.markdown(f"<p class='welcome-subtitle'>Powered by {PAGE_CONFIG_APP_TITLE}</p></div>", unsafe_allow_html=True)
@@ -456,4 +466,3 @@ if not active_file_content_to_process and not (st.session_state.get('column_mapp
 scroll_buttons_component = ScrollButtons()
 scroll_buttons_component.render()
 logger.info(f"App run cycle finished for user '{current_username}'.")
-
