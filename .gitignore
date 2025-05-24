@@ -1,55 +1,55 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
+# Git
+.git/
+.gitignore
+.gitattributes
 
-# Environments
-.env
-.venv
-env/
+# Python virtual environments
 venv/
-ENV/
-env.bak/
-venv.bak/
+.venv/
+env/
+.env/
+*/venv/
+*/.venv/
+*/env/
+*/.env/
 
-# SQLite databases
-*.db
-*.sqlite
-*.sqlite3
-*.db-journal # SQLite journal file
-*.db-wal    # SQLite write-ahead log
-*.db-shm    # SQLite shared-memory file
+# Python caches and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Logs
-logs/
+# IDE and editor specific
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Logs directory (if you don't need to watch it for app changes)
+logs/ 
 *.log
 
-# Streamlit
-.streamlit/secrets.toml # Streamlit Cloud secrets file (if used locally, though typically managed on the platform)
-
-# IDEs and editors
-.idea/
-.vscode/
+# Temporary files
+*.tmp
 *.swp
 *~
 
-# OS generated files
+# OS specific
 .DS_Store
 Thumbs.db
 
-# Coverage reports
-.coverage
-coverage.xml
-htmlcov/
+# Node.js (if applicable, even for local dev tools)
+node_modules/
+package-lock.json
+yarn.lock
 
-# Build artifacts
-dist/
-build/
-*.egg-info/
-
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints
-
-# Temporary files from various tools
-*.tmp
-*.bak
+# Large data directories (if not directly read as files by the app)
+# Example:
+# data_raw/
+# large_datasets/
