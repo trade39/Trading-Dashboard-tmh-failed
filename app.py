@@ -90,14 +90,26 @@ logger.info(f"Application '{APP_TITLE}' starting. Logger initialized.")
 # Instantiate DataService early for user settings
 data_service = DataService()
 analysis_service_instance = AnalysisService()
+logger.info("DataService and AnalysisService instantiated successfully.")
 
 
 # --- Theme Management (Load from DB, then apply) ---
 if 'app_theme_loaded' not in st.session_state:
-    default_theme_from_db = data_service.get_user_setting("default_app_theme", default="dark")
-    st.session_state.current_theme = default_theme_from_db
-    st.session_state.app_theme_loaded = True # Mark that theme has been loaded from DB
-    logger.info(f"Initial theme loaded from DB: {st.session_state.current_theme}")
+    try:
+        # This was the original line 97, where the error occurred.
+        default_theme_from_db = data_service.get_user_setting("default_app_theme", default="dark")
+        st.session_state.current_theme = default_theme_from_db
+        logger.info(f"Initial theme loaded from DB: {st.session_state.current_theme}")
+    except Exception as e_theme_load:
+        # Log the error and fallback to a default theme
+        logger.error(f"Failed to load theme setting from DataService on app startup: {e_theme_load}. Defaulting to 'dark' theme.", exc_info=True)
+        st.session_state.current_theme = "dark" # Fallback theme
+    st.session_state.app_theme_loaded = True # Ensure this is set so we don't retry every time if DB is down
+
+# Ensure current_theme is always set before applying JS, even if the above block was skipped or failed.
+if 'current_theme' not in st.session_state:
+    logger.warning("current_theme was not set after DB attempt or fallback during initial load. Setting to 'dark' as final safety measure.")
+    st.session_state.current_theme = "dark"
 
 
 # Apply theme using JavaScript (must be done on every run if theme can change)
@@ -134,7 +146,7 @@ default_session_state = {
     'user_column_mapping': None, 'column_mapping_confirmed': False,
     'csv_headers_for_mapping': None, 'last_uploaded_file_for_mapping_id': None,
     'last_applied_filters': None, 'sidebar_filters': None, 'active_tab': "📈 Overview",
-    'selected_benchmark_ticker': data_service.get_user_setting("selected_benchmark_ticker", DEFAULT_BENCHMARK_TICKER),
+    'selected_benchmark_ticker': data_service.get_user_setting("selected_benchmark_ticker", DEFAULT_BENCHMARK_TICKER), # This call might also need a try-except if DataService is generally unstable
     'benchmark_daily_returns': None,
     'last_fetched_benchmark_ticker': None, 'last_benchmark_data_filter_shape': None,
     'last_kpi_calc_state_id': None,
@@ -163,9 +175,9 @@ if os.path.exists(LOGO_PATH_SIDEBAR):
         logger.error(f"Error setting st.logo or encoding logo: {e}", exc_info=True)
         # Fallback to st.sidebar.image if st.logo fails
         if logo_base64:
-             st.sidebar.image(f"data:image/png;base64,{logo_base64}", use_column_width='auto')
+            st.sidebar.image(f"data:image/png;base64,{logo_base64}", use_column_width='auto')
         elif os.path.exists(LOGO_PATH_SIDEBAR):
-             st.sidebar.image(LOGO_PATH_SIDEBAR, use_column_width='auto')
+            st.sidebar.image(LOGO_PATH_SIDEBAR, use_column_width='auto')
 else:
     logger.warning(f"Sidebar logo file NOT FOUND at {LOGO_PATH_SIDEBAR}")
 
@@ -176,8 +188,12 @@ st.sidebar.markdown("---")
 toggle_label = "☀️ Switch to Light Mode" if st.session_state.current_theme == "dark" else "🌙 Switch to Dark Mode"
 if st.sidebar.button(toggle_label, key="theme_toggle_button_main_app_v2", help="Toggle between light and dark themes."):
     st.session_state.current_theme = "light" if st.session_state.current_theme == "dark" else "dark"
-    data_service.save_user_setting("default_app_theme", st.session_state.current_theme) # Save to DB
-    logger.info(f"Theme changed to {st.session_state.current_theme} and saved to DB.")
+    try:
+        data_service.save_user_setting("default_app_theme", st.session_state.current_theme) # Save to DB
+        logger.info(f"Theme changed to {st.session_state.current_theme} and saved to DB.")
+    except Exception as e_theme_save:
+        logger.error(f"Failed to save theme preference to DataService: {e_theme_save}", exc_info=True)
+        st.warning("Could not save your theme preference. It will reset on next session.")
     st.rerun()
 st.sidebar.markdown("---")
 
@@ -210,7 +226,10 @@ if current_sidebar_filters:
         st.session_state.benchmark_daily_returns = None # Force re-fetch
         st.session_state.kpi_results = None # Force KPI recalc
         logger.info(f"Global benchmark_ticker updated from sidebar to: {benchmark_ticker_from_sidebar}")
-        data_service.save_user_setting("selected_benchmark_ticker", benchmark_ticker_from_sidebar)
+        try:
+            data_service.save_user_setting("selected_benchmark_ticker", benchmark_ticker_from_sidebar)
+        except Exception as e_benchmark_save:
+            logger.error(f"Failed to save benchmark preference: {e_benchmark_save}", exc_info=True)
 
 
     # Initial Capital (already handled by SidebarManager saving to its own session state key if needed)
@@ -334,9 +353,9 @@ elif st.session_state.get('uploaded_file_name') and uploaded_file is None:
         # More comprehensive reset
         for key_to_reset in default_session_state.keys():
             if key_to_reset == 'current_theme' or key_to_reset == 'app_theme_loaded': continue # Don't reset theme
-            if key_to_reset in default_session_state:
+            if key_to_reset in default_session_state: # Check if key exists in defaults before assigning
                  st.session_state[key_to_reset] = default_session_state[key_to_reset]
-            else: # Should not happen if default_session_state is comprehensive
+            elif key_to_reset in st.session_state: # If not in defaults, but in session, set to None
                  st.session_state[key_to_reset] = None
         st.rerun()
 
@@ -360,7 +379,7 @@ if st.session_state.processed_data is not None and not st.session_state.processe
         # Reset downstream states that depend on filtered_data
         for key_to_reset in ['kpi_results', 'kpi_confidence_intervals', 'benchmark_daily_returns', 'max_drawdown_period_details']:
             st.session_state[key_to_reset] = None
-        logger.info(f"Filtering complete. Filtered data shape: {st.session_state.filtered_data.shape}")
+        logger.info(f"Filtering complete. Filtered data shape: {st.session_state.filtered_data.shape if st.session_state.filtered_data is not None else 'None'}")
 
 
 # --- Benchmark Data Fetching Logic ---
