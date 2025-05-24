@@ -93,11 +93,13 @@ init_session_state_key('user_preferences', {})
 init_session_state_key('current_theme', st.session_state.user_preferences.get('default_theme', 'dark'))
 init_session_state_key('selected_user_file_id', None)
 init_session_state_key('uploaded_file_name', None)
-init_session_state_key('current_file_content_for_processing', None)
-init_session_state_key('user_column_mapping', None)
-init_session_state_key('column_mapping_confirmed', False)
-init_session_state_key('last_processed_file_id_for_mapping_ui', None)
-init_session_state_key('initial_mapping_override_for_ui', None)
+init_session_state_key('current_file_content_for_processing', None) # BytesIO
+init_session_state_key('user_column_mapping', None) # Dict
+init_session_state_key('column_mapping_confirmed', False) # Bool
+init_session_state_key('last_processed_file_id_for_mapping_ui', None) # Tracks file for ColumnMapperUI re-init
+init_session_state_key('initial_mapping_override_for_ui', None) # Loaded mapping for ColumnMapperUI
+init_session_state_key('csv_headers_for_mapper_ui', None) # List of headers for current file
+
 init_session_state_key('processed_data', None)
 init_session_state_key('filtered_data', None)
 init_session_state_key('kpi_results', None)
@@ -147,9 +149,9 @@ def display_login_form():
         auth_area_container = st.container(border=True)
         with auth_area_container:
             st.markdown(f"<h2 style='text-align: center; color: var(--text-heading-color);'>Login to {APP_TITLE}</h2>", unsafe_allow_html=True)
-            with st.form("login_form_main_v7_final_fixed"):
-                username = st.text_input("Username", key="login_username_v7_final_fixed", placeholder="Enter your username")
-                password = st.text_input("Password", type="password", key="login_password_v7_final_fixed", placeholder="Enter your password")
+            with st.form("login_form_main_v8_mapper_fix"):
+                username = st.text_input("Username", key="login_username_v8_mapper_fix", placeholder="Enter your username")
+                password = st.text_input("Password", type="password", key="login_password_v8_mapper_fix", placeholder="Enter your password")
                 submitted = st.form_submit_button("🔑 Login", use_container_width=True, type="primary")
                 if submitted:
                     if not username or not password: display_custom_message("Username and password are required.", "error")
@@ -172,10 +174,10 @@ def display_login_form():
                         else: display_custom_message("Invalid username or password.", "error")
             col_auth_links1, col_auth_links2 = st.columns(2)
             with col_auth_links1:
-                if st.button("🔑 Forgot Password?", use_container_width=True, key="forgot_password_link_v7_final_fixed"):
+                if st.button("🔑 Forgot Password?", use_container_width=True, key="forgot_password_link_v8_mapper_fix"):
                     st.session_state.auth_flow_page = 'forgot_password_request'; st.rerun()
             with col_auth_links2:
-                if st.button("➕ Register New Account", use_container_width=True, key="goto_register_btn_v7_final_fixed"):
+                if st.button("➕ Register New Account", use_container_width=True, key="goto_register_btn_v8_mapper_fix"):
                     st.session_state.auth_flow_page = 'register'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -186,11 +188,11 @@ def display_registration_form():
         with auth_area_container:
             st.markdown(f"<h2 style='text-align: center; color: var(--text-heading-color);'>Register for {APP_TITLE}</h2>", unsafe_allow_html=True)
             st.markdown("""<small style='color: var(--text-muted-color);'>Password must: <ul><li>Be at least 8 characters long</li><li>Contain at least one uppercase letter (A-Z)</li><li>Contain at least one lowercase letter (a-z)</li><li>Contain at least one digit (0-9)</li><li>Contain at least one special character (e.g., !@#$%^&*)</li></ul></small>""", unsafe_allow_html=True)
-            with st.form("registration_form_v7_final_fixed"):
-                reg_username = st.text_input("Username", key="reg_username_v7_final_fixed")
-                reg_email = st.text_input("Email (Required for password reset)", key="reg_email_v7_final_fixed")
-                reg_password = st.text_input("Password", type="password", key="reg_password_v7_final_fixed")
-                reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm_v7_final_fixed")
+            with st.form("registration_form_v8_mapper_fix"):
+                reg_username = st.text_input("Username", key="reg_username_v8_mapper_fix")
+                reg_email = st.text_input("Email (Required for password reset)", key="reg_email_v8_mapper_fix")
+                reg_password = st.text_input("Password", type="password", key="reg_password_v8_mapper_fix")
+                reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm_v8_mapper_fix")
                 reg_submitted = st.form_submit_button("➕ Register Account", use_container_width=True, type="primary")
                 if reg_submitted:
                     if not reg_username or not reg_password or not reg_password_confirm or not reg_email: display_custom_message("Username, Email, password, and confirmation are required.", "error")
@@ -199,7 +201,7 @@ def display_registration_form():
                         registration_result = auth_service.register_user(reg_username, reg_password, reg_email)
                         if registration_result.get("user"): display_custom_message(f"User '{reg_username}' registered successfully! Please login.", "success"); st.session_state.auth_flow_page = 'login'; st.rerun()
                         else: display_custom_message(registration_result.get("error", "Registration failed."), "error")
-            if st.button("Already have an account? Login", use_container_width=True, key="goto_login_from_reg_v7_final_fixed"):
+            if st.button("Already have an account? Login", use_container_width=True, key="goto_login_from_reg_v8_mapper_fix"):
                 st.session_state.auth_flow_page = 'login'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -210,8 +212,8 @@ def display_forgot_password_request_form():
         with auth_area_container:
             st.markdown(f"<h2 style='text-align: center; color: var(--text-heading-color);'>Forgot Password</h2>", unsafe_allow_html=True)
             st.write("Enter your email address. If an account exists, a password reset link will be sent.")
-            with st.form("forgot_password_request_form_v7_final_fixed"):
-                email_input = st.text_input("Your Email Address", key="forgot_pw_email_v7_final_fixed", placeholder="you@example.com")
+            with st.form("forgot_password_request_form_v8_mapper_fix"):
+                email_input = st.text_input("Your Email Address", key="forgot_pw_email_v8_mapper_fix", placeholder="you@example.com")
                 submit_request = st.form_submit_button("📧 Send Reset Link", use_container_width=True, type="primary")
                 if submit_request:
                     if not email_input: display_custom_message("Please enter your email address.", "error")
@@ -219,7 +221,7 @@ def display_forgot_password_request_form():
                         with st.spinner("Processing request..."): result = auth_service.create_password_reset_token(email_input)
                         display_custom_message(result.get("success", "If an account with this email exists, a password reset link has been sent."), "success" if result.get("success") else "info")
                         if result.get("error"): logger.error(f"Forgot password error: {result.get('error')}")
-            if st.button("Back to Login", use_container_width=True, key="forgot_pw_back_to_login_v7_final_fixed"):
+            if st.button("Back to Login", use_container_width=True, key="forgot_pw_back_to_login_v8_mapper_fix"):
                 st.session_state.auth_flow_page = 'login'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -232,13 +234,13 @@ def display_reset_password_form():
             token = st.session_state.get('password_reset_token')
             if not token:
                 display_custom_message("Invalid or missing reset token. Please request a new link.", "error")
-                if st.button("Request New Link", use_container_width=True, key="reset_form_req_new_link_v7_final_fixed"):
+                if st.button("Request New Link", use_container_width=True, key="reset_form_req_new_link_v8_mapper_fix"):
                     st.session_state.auth_flow_page = 'forgot_password_request'; st.session_state.password_reset_token = None; st.rerun()
                 st.markdown("</div></div>", unsafe_allow_html=True); return
             st.markdown("""<small style='color: var(--text-muted-color);'>New password must meet complexity rules.</small>""", unsafe_allow_html=True)
-            with st.form("reset_password_form_v7_final_fixed"):
-                new_password = st.text_input("New Password", type="password", key="reset_pw_new_v7_final_fixed")
-                confirm_new_password = st.text_input("Confirm New Password", type="password", key="reset_pw_confirm_v7_final_fixed")
+            with st.form("reset_password_form_v8_mapper_fix"):
+                new_password = st.text_input("New Password", type="password", key="reset_pw_new_v8_mapper_fix")
+                confirm_new_password = st.text_input("Confirm New Password", type="password", key="reset_pw_confirm_v8_mapper_fix")
                 submit_reset = st.form_submit_button("🔑 Reset Password", use_container_width=True, type="primary")
                 if submit_reset:
                     if not new_password or not confirm_new_password: display_custom_message("Please enter and confirm your new password.", "error")
@@ -248,9 +250,9 @@ def display_reset_password_form():
                         if result.get("success"):
                             display_custom_message(result["success"] + " You can now log in.", "success")
                             st.session_state.auth_flow_page = 'login'; st.session_state.password_reset_token = None
-                            if st.button("Go to Login", key="reset_pw_goto_login_v7_final_fixed"): st.rerun()
+                            if st.button("Go to Login", key="reset_pw_goto_login_v8_mapper_fix"): st.rerun()
                         else: display_custom_message(result.get("error", "Could not reset password."), "error")
-            if st.button("Cancel", use_container_width=True, type="secondary", key="reset_pw_cancel_v7_final_fixed"):
+            if st.button("Cancel", use_container_width=True, type="secondary", key="reset_pw_cancel_v8_mapper_fix"):
                 st.session_state.auth_flow_page = 'login'; st.session_state.password_reset_token = None; st.rerun()
         st.markdown("</div></div>", unsafe_allow_html=True)
 
@@ -292,7 +294,7 @@ if LOGO_PATH_SIDEBAR and os.path.exists(LOGO_PATH_SIDEBAR):
 elif LOGO_PATH_SIDEBAR: logger.warning(f"Sidebar logo path specified but not found: {LOGO_PATH_SIDEBAR}")
 
 st.sidebar.markdown(f"Logged in as: **{current_username}**")
-if st.sidebar.button("🔒 Logout", key="logout_app_v7_final", use_container_width=True):
+if st.sidebar.button("🔒 Logout", key="logout_app_v8_mapper_fix", use_container_width=True):
     logger.info(f"User '{current_username}' logging out.")
     keys_to_clear = list(st.session_state.keys())
     for key in keys_to_clear:
@@ -302,7 +304,7 @@ if st.sidebar.button("🔒 Logout", key="logout_app_v7_final", use_container_wid
 
 st.sidebar.markdown("---")
 toggle_label = "Switch to Dark Mode" if st.session_state.current_theme == "light" else "Switch to Light Mode"
-if st.sidebar.button(toggle_label, key="theme_toggle_app_v7_final", use_container_width=True):
+if st.sidebar.button(toggle_label, key="theme_toggle_app_v8_mapper_fix", use_container_width=True):
     new_theme = "dark" if st.session_state.current_theme == "light" else "light"
     st.session_state.current_theme = new_theme
     auth_service.update_user_settings(current_user_id, {'default_theme': new_theme})
@@ -316,12 +318,12 @@ file_options["✨ Upload New File..."] = "upload_new"
 default_label = st.session_state.get('last_selected_file_label', "✨ Upload New File...")
 if default_label not in file_options: default_label = "✨ Upload New File..."
 selected_label = st.sidebar.selectbox("Select/Upload Journal:", options=list(file_options.keys()),
-                                      index=list(file_options.keys()).index(default_label), key="main_file_select_v7_final")
+                                      index=list(file_options.keys()).index(default_label), key="main_file_select_v8_mapper_fix")
 st.session_state.last_selected_file_label = selected_label
 selected_id = file_options.get(selected_label)
 
 if selected_id == "upload_new":
-    new_file = st.sidebar.file_uploader("Upload CSV", type=["csv"], key="main_uploader_v7_final")
+    new_file = st.sidebar.file_uploader("Upload CSV", type=["csv"], key="main_uploader_v8_mapper_fix")
     if new_file:
         raw_id = id(new_file)
         if st.session_state.last_uploaded_raw_file_id_tracker != raw_id:
@@ -333,14 +335,15 @@ elif selected_id and st.session_state.selected_user_file_id != selected_id:
     st.session_state.trigger_file_load_id = selected_id
     st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None
     st.session_state.initial_mapping_override_for_ui = None; st.session_state.last_processed_file_id_for_mapping_ui = None
+    st.session_state.csv_headers_for_mapper_ui = None # Clear headers for new file
     st.session_state.processed_data = None; st.rerun()
 
 if selected_id != "upload_new" and selected_id:
-    if st.sidebar.button(f"🗑️ Delete '{selected_label.split(' (')[0]}'", key=f"del_file_{selected_id}_v7_final"):
+    if st.sidebar.button(f"🗑️ Delete '{selected_label.split(' (')[0]}'", key=f"del_file_{selected_id}_v8_mapper_fix"):
         if data_service.delete_user_file(selected_id, current_user_id, True):
             st.sidebar.success(f"File '{selected_label}' deleted.")
             if st.session_state.selected_user_file_id == selected_id:
-                keys_to_reset = ['selected_user_file_id', 'uploaded_file_name', 'current_file_content_for_processing', 'user_column_mapping', 'column_mapping_confirmed', 'initial_mapping_override_for_ui', 'last_processed_file_id_for_mapping_ui', 'processed_data', 'filtered_data', 'kpi_results', 'kpi_confidence_intervals', 'benchmark_daily_returns', 'max_drawdown_period_details', 'all_drawdown_periods', 'last_analysis_run_signature', 'last_selected_file_label']
+                keys_to_reset = ['selected_user_file_id', 'uploaded_file_name', 'current_file_content_for_processing', 'user_column_mapping', 'column_mapping_confirmed', 'initial_mapping_override_for_ui', 'last_processed_file_id_for_mapping_ui', 'csv_headers_for_mapper_ui', 'processed_data', 'filtered_data', 'kpi_results', 'kpi_confidence_intervals', 'benchmark_daily_returns', 'max_drawdown_period_details', 'all_drawdown_periods', 'last_analysis_run_signature', 'last_selected_file_label']
                 for k in keys_to_reset:
                     if k in st.session_state: del st.session_state[k]
             st.rerun()
@@ -376,11 +379,12 @@ if st.session_state.trigger_file_save_processing and st.session_state.pending_fi
         st.session_state.selected_user_file_id = record.id; st.session_state.trigger_file_load_id = record.id
         st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None
         st.session_state.initial_mapping_override_for_ui = None; st.session_state.last_processed_file_id_for_mapping_ui = None
-        st.session_state.processed_data = None; logger.info(f"File '{original_name}' saved (ID: {record.id})."); st.rerun()
+        st.session_state.csv_headers_for_mapper_ui = None; st.session_state.processed_data = None
+        logger.info(f"File '{original_name}' saved (ID: {record.id})."); st.rerun()
     else: display_custom_message(f"Failed to save file '{original_name}'.", "error")
 
 if st.session_state.trigger_file_load_id:
-    file_id = st.session_state.trigger_file_load_id; st.session_state.trigger_file_load_id = None
+    file_id = st.session_state.trigger_file_load_id; st.session_state.trigger_file_load_id = None # Reset trigger
     with st.spinner(f"Loading file ID {file_id}..."):
         content_io = data_service.get_user_file_content(file_id, current_user_id)
         record = data_service.get_user_file_record_by_id(file_id, current_user_id)
@@ -389,30 +393,73 @@ if st.session_state.trigger_file_load_id:
         st.session_state.uploaded_file_name = record.original_file_name
         st.session_state.selected_user_file_id = file_id
         st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None
-        st.session_state.initial_mapping_override_for_ui = None; st.session_state.processed_data = None
-        logger.info(f"File '{record.original_file_name}' loaded."); st.rerun()
+        st.session_state.initial_mapping_override_for_ui = None; st.session_state.csv_headers_for_mapper_ui = None
+        st.session_state.processed_data = None; logger.info(f"File '{record.original_file_name}' loaded."); st.rerun()
     elif file_id: display_custom_message(f"Failed to load file ID {file_id}.", "error"); st.session_state.selected_user_file_id = None
 
-if st.session_state.current_file_content_for_processing and not st.session_state.column_mapping_confirmed and st.session_state.selected_user_file_id and st.session_state.selected_user_file_id != "upload_new":
-    file_id_map = st.session_state.selected_user_file_id
-    if st.session_state.last_processed_file_id_for_mapping_ui != file_id_map:
-        with st.spinner("Loading mapping..."): st.session_state.initial_mapping_override_for_ui = data_service.get_user_column_mapping(current_user_id, file_id_map)
-        st.session_state.last_processed_file_id_for_mapping_ui = file_id_map
-    headers = []
-    st.session_state.current_file_content_for_processing.seek(0)
-    try: headers = pd.read_csv(st.session_state.current_file_content_for_processing, nrows=0).columns.tolist(); st.session_state.current_file_content_for_processing.seek(0)
-    except Exception as e: display_custom_message(f"Error reading CSV headers: {e}", "error"); st.stop()
-    if not headers: display_custom_message("No CSV headers.", "error"); st.stop()
-    
+if st.session_state.current_file_content_for_processing and \
+   not st.session_state.column_mapping_confirmed and \
+   st.session_state.selected_user_file_id and \
+   st.session_state.selected_user_file_id != "upload_new":
+
+    current_file_id_map = st.session_state.selected_user_file_id
+    if st.session_state.last_processed_file_id_for_mapping_ui != current_file_id_map:
+        with st.spinner("Loading saved mapping..."):
+            st.session_state.initial_mapping_override_for_ui = data_service.get_user_column_mapping(current_user_id, current_file_id_map)
+        st.session_state.last_processed_file_id_for_mapping_ui = current_file_id_map
+        st.session_state.csv_headers_for_mapper_ui = None # Force header re-extraction
+
+    if st.session_state.csv_headers_for_mapper_ui is None:
+        st.session_state.current_file_content_for_processing.seek(0)
+        try:
+            with st.spinner("Extracting column headers from CSV..."):
+                # Use a more robust read attempt for headers, similar to ColumnMapperUI's preview
+                try:
+                    temp_df_for_headers = pd.read_csv(st.session_state.current_file_content_for_processing, nrows=0, engine='python', skipinitialspace=True)
+                except UnicodeDecodeError:
+                    st.session_state.current_file_content_for_processing.seek(0)
+                    import chardet # Local import
+                    raw_sample_header = st.session_state.current_file_content_for_processing.read(min(50000, st.session_state.current_file_content_for_processing.getbuffer().nbytes if hasattr(st.session_state.current_file_content_for_processing, 'getbuffer') else 50000))
+                    detected_header = chardet.detect(raw_sample_header)
+                    detected_encoding_header = detected_header.get('encoding', 'latin1')
+                    st.session_state.current_file_content_for_processing.seek(0)
+                    temp_df_for_headers = pd.read_csv(st.session_state.current_file_content_for_processing, nrows=0, engine='python', skipinitialspace=True, encoding=detected_encoding_header)
+
+            st.session_state.csv_headers_for_mapper_ui = temp_df_for_headers.columns.tolist()
+            st.session_state.current_file_content_for_processing.seek(0)
+            if not st.session_state.csv_headers_for_mapper_ui:
+                logger.error("CSV header extraction resulted in an empty list for ColumnMapperUI trigger.")
+                display_custom_message("Could not extract headers from CSV. File might be empty or invalid.", "error")
+                st.session_state.current_file_content_for_processing = None; st.stop()
+        except pd.errors.EmptyDataError:
+            logger.error("Pandas EmptyDataError: No data/headers in CSV for ColumnMapperUI trigger.", exc_info=True)
+            display_custom_message("Uploaded CSV is empty or has no headers.", "error")
+            st.session_state.current_file_content_for_processing = None; st.stop()
+        except Exception as e_header:
+            logger.error(f"Could not read headers for ColumnMapperUI trigger: {e_header}", exc_info=True)
+            display_custom_message(f"Error reading CSV headers: {e_header}. Ensure valid CSV.", "error")
+            st.session_state.current_file_content_for_processing = None; st.stop()
+
+    # This container ensures ColumnMapperUI is part of the main page flow
     with st.container():
-        mapper = ColumnMapperUI(st.session_state.uploaded_file_name, st.session_state.current_file_content_for_processing, headers, CONCEPTUAL_COLUMNS, CONCEPTUAL_COLUMN_TYPES, CONCEPTUAL_COLUMN_SYNONYMS, CRITICAL_CONCEPTUAL_COLUMNS, CONCEPTUAL_COLUMN_CATEGORIES, st.session_state.initial_mapping_override_for_ui)
-        result = mapper.render()
-        if result:
-            if data_service.save_user_column_mapping(current_user_id, file_id_map, result): logger.info("Mapping saved.")
+        column_mapper = ColumnMapperUI(
+            st.session_state.uploaded_file_name,
+            st.session_state.current_file_content_for_processing,
+            st.session_state.csv_headers_for_mapper_ui,
+            CONCEPTUAL_COLUMNS, CONCEPTUAL_COLUMN_TYPES, CONCEPTUAL_COLUMN_SYNONYMS,
+            CRITICAL_CONCEPTUAL_COLUMNS, CONCEPTUAL_COLUMN_CATEGORIES,
+            st.session_state.initial_mapping_override_for_ui
+        )
+        mapping_result = column_mapper.render() # This call itself might take time if its __init__ reads file
+        if mapping_result:
+            if data_service.save_user_column_mapping(current_user_id, current_file_id_map, mapping_result): logger.info("Mapping saved.")
             else: display_custom_message("Error saving mapping.", "error")
-            st.session_state.user_column_mapping = result; st.session_state.column_mapping_confirmed = True
+            st.session_state.user_column_mapping = mapping_result; st.session_state.column_mapping_confirmed = True
             st.session_state.processed_data = None; st.session_state.last_analysis_run_signature = None; st.rerun()
-        else: display_custom_message("Please complete column mapping.", "info", icon="⚙️"); st.stop()
+        else:
+            display_custom_message("Please complete column mapping to proceed.", "info", icon="⚙️")
+            st.stop()
+
 
 if st.session_state.current_file_content_for_processing and st.session_state.user_column_mapping and st.session_state.column_mapping_confirmed:
     sig_parts = (st.session_state.selected_user_file_id, tuple(sorted(st.session_state.user_column_mapping.items())) if st.session_state.user_column_mapping else None, st.session_state.risk_free_rate, st.session_state.selected_benchmark_ticker, st.session_state.initial_capital, tuple(sorted(st.session_state.global_date_filter_range)) if st.session_state.global_date_filter_range else None, st.session_state.global_symbol_filter, st.session_state.global_strategy_filter)
@@ -447,10 +494,6 @@ if st.session_state.current_file_content_for_processing and st.session_state.use
         else:
             display_custom_message("Core analysis service failed.", "error")
             st.session_state.processed_data = None; st.session_state.filtered_data = None; st.session_state.kpi_results = {"error": "Analysis service did not respond."}
-
-# Removed the problematic block that used st.runtime
-# The welcome message or "no data" state is handled by the default page (e.g., User Guide)
-# or by individual pages if st.session_state.filtered_data is empty.
 
 scroll_buttons = ScrollButtons()
 scroll_buttons.render()
