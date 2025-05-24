@@ -147,42 +147,35 @@ def display_login_form():
         auth_area_container = st.container(border=True)
         with auth_area_container:
             st.markdown(f"<h2 style='text-align: center; color: var(--text-heading-color);'>Login to {APP_TITLE}</h2>", unsafe_allow_html=True)
-            with st.form("login_form_main_v7_final"):
-                username = st.text_input("Username", key="login_username_v7_final", placeholder="Enter your username")
-                password = st.text_input("Password", type="password", key="login_password_v7_final", placeholder="Enter your password")
+            with st.form("login_form_main_v7_final_fixed"):
+                username = st.text_input("Username", key="login_username_v7_final_fixed", placeholder="Enter your username")
+                password = st.text_input("Password", type="password", key="login_password_v7_final_fixed", placeholder="Enter your password")
                 submitted = st.form_submit_button("🔑 Login", use_container_width=True, type="primary")
                 if submitted:
                     if not username or not password: display_custom_message("Username and password are required.", "error")
                     else:
-                        user = auth_service.authenticate_user(username, password) # This now returns a User ORM object
-                        if user and user.id is not None and user.username is not None: # Check if user object and essential attrs are valid
+                        user = auth_service.authenticate_user(username, password)
+                        if user and user.id is not None and user.username is not None:
                             st.session_state.authenticated_user = {'user_id': user.id, 'username': user.username}
                             st.session_state.auth_flow_page = None
-                            # Access settings from the user object (which should have settings eager-loaded)
                             user_settings_obj = user.settings
                             if user_settings_obj:
-                                st.session_state.user_preferences = {
-                                    'default_theme': user_settings_obj.default_theme,
-                                    'default_risk_free_rate': user_settings_obj.default_risk_free_rate,
-                                    'default_benchmark_ticker': user_settings_obj.default_benchmark_ticker
-                                }
-                                if st.session_state.current_theme != user_settings_obj.default_theme:
-                                    st.session_state.current_theme = user_settings_obj.default_theme
+                                st.session_state.user_preferences = {'default_theme': user_settings_obj.default_theme, 'default_risk_free_rate': user_settings_obj.default_risk_free_rate, 'default_benchmark_ticker': user_settings_obj.default_benchmark_ticker}
+                                if st.session_state.current_theme != user_settings_obj.default_theme: st.session_state.current_theme = user_settings_obj.default_theme
                                 st.session_state.risk_free_rate = user_settings_obj.default_risk_free_rate
                                 st.session_state.selected_benchmark_ticker = user_settings_obj.default_benchmark_ticker
                                 st.session_state.selected_benchmark_display_name = next((name for name, ticker_val in AVAILABLE_BENCHMARKS.items() if ticker_val == user_settings_obj.default_benchmark_ticker), "None")
-                            else: # Fallback if settings relationship wasn't loaded or doesn't exist (should be rare)
+                            else:
                                 logger.warning(f"User settings not found for user {user.username} upon login. Applying global defaults.")
                                 st.session_state.user_preferences = {'default_theme': 'dark', 'default_risk_free_rate': RISK_FREE_RATE, 'default_benchmark_ticker': DEFAULT_BENCHMARK_TICKER}
                             st.success(f"Welcome back, {user.username}!"); st.rerun()
-                        else:
-                            display_custom_message("Invalid username or password.", "error")
+                        else: display_custom_message("Invalid username or password.", "error")
             col_auth_links1, col_auth_links2 = st.columns(2)
             with col_auth_links1:
-                if st.button("🔑 Forgot Password?", use_container_width=True, key="forgot_password_link_v7_final"):
+                if st.button("🔑 Forgot Password?", use_container_width=True, key="forgot_password_link_v7_final_fixed"):
                     st.session_state.auth_flow_page = 'forgot_password_request'; st.rerun()
             with col_auth_links2:
-                if st.button("➕ Register New Account", use_container_width=True, key="goto_register_btn_v7_final"):
+                if st.button("➕ Register New Account", use_container_width=True, key="goto_register_btn_v7_final_fixed"):
                     st.session_state.auth_flow_page = 'register'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -193,11 +186,11 @@ def display_registration_form():
         with auth_area_container:
             st.markdown(f"<h2 style='text-align: center; color: var(--text-heading-color);'>Register for {APP_TITLE}</h2>", unsafe_allow_html=True)
             st.markdown("""<small style='color: var(--text-muted-color);'>Password must: <ul><li>Be at least 8 characters long</li><li>Contain at least one uppercase letter (A-Z)</li><li>Contain at least one lowercase letter (a-z)</li><li>Contain at least one digit (0-9)</li><li>Contain at least one special character (e.g., !@#$%^&*)</li></ul></small>""", unsafe_allow_html=True)
-            with st.form("registration_form_v7_final"):
-                reg_username = st.text_input("Username", key="reg_username_v7_final")
-                reg_email = st.text_input("Email (Required for password reset)", key="reg_email_v7_final")
-                reg_password = st.text_input("Password", type="password", key="reg_password_v7_final")
-                reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm_v7_final")
+            with st.form("registration_form_v7_final_fixed"):
+                reg_username = st.text_input("Username", key="reg_username_v7_final_fixed")
+                reg_email = st.text_input("Email (Required for password reset)", key="reg_email_v7_final_fixed")
+                reg_password = st.text_input("Password", type="password", key="reg_password_v7_final_fixed")
+                reg_password_confirm = st.text_input("Confirm Password", type="password", key="reg_password_confirm_v7_final_fixed")
                 reg_submitted = st.form_submit_button("➕ Register Account", use_container_width=True, type="primary")
                 if reg_submitted:
                     if not reg_username or not reg_password or not reg_password_confirm or not reg_email: display_custom_message("Username, Email, password, and confirmation are required.", "error")
@@ -206,7 +199,7 @@ def display_registration_form():
                         registration_result = auth_service.register_user(reg_username, reg_password, reg_email)
                         if registration_result.get("user"): display_custom_message(f"User '{reg_username}' registered successfully! Please login.", "success"); st.session_state.auth_flow_page = 'login'; st.rerun()
                         else: display_custom_message(registration_result.get("error", "Registration failed."), "error")
-            if st.button("Already have an account? Login", use_container_width=True, key="goto_login_from_reg_v7_final"):
+            if st.button("Already have an account? Login", use_container_width=True, key="goto_login_from_reg_v7_final_fixed"):
                 st.session_state.auth_flow_page = 'login'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -217,8 +210,8 @@ def display_forgot_password_request_form():
         with auth_area_container:
             st.markdown(f"<h2 style='text-align: center; color: var(--text-heading-color);'>Forgot Password</h2>", unsafe_allow_html=True)
             st.write("Enter your email address. If an account exists, a password reset link will be sent.")
-            with st.form("forgot_password_request_form_v7_final"):
-                email_input = st.text_input("Your Email Address", key="forgot_pw_email_v7_final", placeholder="you@example.com")
+            with st.form("forgot_password_request_form_v7_final_fixed"):
+                email_input = st.text_input("Your Email Address", key="forgot_pw_email_v7_final_fixed", placeholder="you@example.com")
                 submit_request = st.form_submit_button("📧 Send Reset Link", use_container_width=True, type="primary")
                 if submit_request:
                     if not email_input: display_custom_message("Please enter your email address.", "error")
@@ -226,7 +219,7 @@ def display_forgot_password_request_form():
                         with st.spinner("Processing request..."): result = auth_service.create_password_reset_token(email_input)
                         display_custom_message(result.get("success", "If an account with this email exists, a password reset link has been sent."), "success" if result.get("success") else "info")
                         if result.get("error"): logger.error(f"Forgot password error: {result.get('error')}")
-            if st.button("Back to Login", use_container_width=True, key="forgot_pw_back_to_login_v7_final"):
+            if st.button("Back to Login", use_container_width=True, key="forgot_pw_back_to_login_v7_final_fixed"):
                 st.session_state.auth_flow_page = 'login'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -239,13 +232,13 @@ def display_reset_password_form():
             token = st.session_state.get('password_reset_token')
             if not token:
                 display_custom_message("Invalid or missing reset token. Please request a new link.", "error")
-                if st.button("Request New Link", use_container_width=True, key="reset_form_req_new_link_v7_final"):
+                if st.button("Request New Link", use_container_width=True, key="reset_form_req_new_link_v7_final_fixed"):
                     st.session_state.auth_flow_page = 'forgot_password_request'; st.session_state.password_reset_token = None; st.rerun()
                 st.markdown("</div></div>", unsafe_allow_html=True); return
             st.markdown("""<small style='color: var(--text-muted-color);'>New password must meet complexity rules.</small>""", unsafe_allow_html=True)
-            with st.form("reset_password_form_v7_final"):
-                new_password = st.text_input("New Password", type="password", key="reset_pw_new_v7_final")
-                confirm_new_password = st.text_input("Confirm New Password", type="password", key="reset_pw_confirm_v7_final")
+            with st.form("reset_password_form_v7_final_fixed"):
+                new_password = st.text_input("New Password", type="password", key="reset_pw_new_v7_final_fixed")
+                confirm_new_password = st.text_input("Confirm New Password", type="password", key="reset_pw_confirm_v7_final_fixed")
                 submit_reset = st.form_submit_button("🔑 Reset Password", use_container_width=True, type="primary")
                 if submit_reset:
                     if not new_password or not confirm_new_password: display_custom_message("Please enter and confirm your new password.", "error")
@@ -255,13 +248,12 @@ def display_reset_password_form():
                         if result.get("success"):
                             display_custom_message(result["success"] + " You can now log in.", "success")
                             st.session_state.auth_flow_page = 'login'; st.session_state.password_reset_token = None
-                            if st.button("Go to Login", key="reset_pw_goto_login_v7_final"): st.rerun()
+                            if st.button("Go to Login", key="reset_pw_goto_login_v7_final_fixed"): st.rerun()
                         else: display_custom_message(result.get("error", "Could not reset password."), "error")
-            if st.button("Cancel", use_container_width=True, type="secondary", key="reset_pw_cancel_v7_final"):
+            if st.button("Cancel", use_container_width=True, type="secondary", key="reset_pw_cancel_v7_final_fixed"):
                 st.session_state.auth_flow_page = 'login'; st.session_state.password_reset_token = None; st.rerun()
         st.markdown("</div></div>", unsafe_allow_html=True)
 
-# Handle password reset token from URL
 query_params = st.query_params
 if "page" in query_params and str(query_params.get("page", "")).strip() == "reset_password_form" and "token" in query_params:
     token_from_url = str(query_params.get("token", "")).strip()
@@ -391,7 +383,7 @@ if st.session_state.trigger_file_load_id:
     file_id = st.session_state.trigger_file_load_id; st.session_state.trigger_file_load_id = None
     with st.spinner(f"Loading file ID {file_id}..."):
         content_io = data_service.get_user_file_content(file_id, current_user_id)
-        record = data_service.get_user_file_record_by_id(file_id, current_user_id) # Assumed method in DataService
+        record = data_service.get_user_file_record_by_id(file_id, current_user_id)
     if content_io and record:
         st.session_state.current_file_content_for_processing = content_io
         st.session_state.uploaded_file_name = record.original_file_name
@@ -456,22 +448,9 @@ if st.session_state.current_file_content_for_processing and st.session_state.use
             display_custom_message("Core analysis service failed.", "error")
             st.session_state.processed_data = None; st.session_state.filtered_data = None; st.session_state.kpi_results = {"error": "Analysis service did not respond."}
 
-elif not st.session_state.current_file_content_for_processing and st.session_state.authenticated_user:
-    # Landing state for authenticated user before file interaction.
-    # The default page (User Guide) will handle its display.
-    # If app.py is the current "page" (before Streamlit switches to a page in pages/), show welcome.
-    # This check is a heuristic.
-    current_page_path = st.runtime.get_instance().get_script_run_ctx().page_script_hash
-    # This might be too internal. A simpler check is if no file processing has started.
-    if 'selected_user_file_id' not in st.session_state or st.session_state.selected_user_file_id is None:
-         # Check if we are on the main app.py page (not a sub-page from `pages/`)
-         # This requires knowing the script path of app.py.
-         # A simpler approach: if no file is loaded, the User Guide (page 0) is often the default landing.
-         # If the current page is the main app.py (and not a page from the `pages` dir), show welcome.
-         # This logic is complex because app.py always runs.
-         # For now, let the default page (User Guide) handle this if no data is loaded.
-         pass
-
+# Removed the problematic block that used st.runtime
+# The welcome message or "no data" state is handled by the default page (e.g., User Guide)
+# or by individual pages if st.session_state.filtered_data is empty.
 
 scroll_buttons = ScrollButtons()
 scroll_buttons.render()
