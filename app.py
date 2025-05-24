@@ -100,6 +100,7 @@ init_session_state_key('column_mapping_confirmed', False) # Bool
 init_session_state_key('last_processed_file_id_for_mapping_ui', None)
 init_session_state_key('initial_mapping_override_for_ui', None)
 init_session_state_key('csv_headers_for_mapper_ui', None) # List of headers
+init_session_state_key('detected_file_encoding', None) # NEW: For storing detected encoding
 
 init_session_state_key('processed_data', None)
 init_session_state_key('filtered_data', None)
@@ -331,12 +332,21 @@ if selected_id == "upload_new":
             st.session_state.pending_file_to_save_content = new_file.getvalue()
             st.session_state.pending_file_to_save_name = new_file.name
             st.session_state.trigger_file_save_processing = True
-            st.session_state.last_uploaded_raw_file_id_tracker = raw_id; st.rerun()
+            st.session_state.last_uploaded_raw_file_id_tracker = raw_id
+            # Reset encoding and headers for new upload
+            st.session_state.detected_file_encoding = None
+            st.session_state.csv_headers_for_mapper_ui = None
+            st.session_state.column_mapping_confirmed = False
+            st.session_state.user_column_mapping = None
+            st.session_state.initial_mapping_override_for_ui = None
+            st.session_state.last_processed_file_id_for_mapping_ui = None
+            st.session_state.processed_data = None
+            st.rerun()
 elif selected_id and st.session_state.selected_user_file_id != selected_id:
     st.session_state.trigger_file_load_id = selected_id
     st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None
     st.session_state.initial_mapping_override_for_ui = None; st.session_state.last_processed_file_id_for_mapping_ui = None
-    st.session_state.csv_headers_for_mapper_ui = None
+    st.session_state.csv_headers_for_mapper_ui = None; st.session_state.detected_file_encoding = None
     st.session_state.processed_data = None; st.rerun()
 
 if selected_id != "upload_new" and selected_id:
@@ -344,7 +354,12 @@ if selected_id != "upload_new" and selected_id:
         if data_service.delete_user_file(selected_id, current_user_id, True):
             st.sidebar.success(f"File '{selected_label}' deleted.")
             if st.session_state.selected_user_file_id == selected_id:
-                keys_to_reset = ['selected_user_file_id', 'uploaded_file_name', 'current_file_content_for_processing', 'user_column_mapping', 'column_mapping_confirmed', 'initial_mapping_override_for_ui', 'last_processed_file_id_for_mapping_ui', 'csv_headers_for_mapper_ui', 'processed_data', 'filtered_data', 'kpi_results', 'kpi_confidence_intervals', 'benchmark_daily_returns', 'max_drawdown_period_details', 'all_drawdown_periods', 'last_analysis_run_signature', 'last_selected_file_label']
+                keys_to_reset = ['selected_user_file_id', 'uploaded_file_name', 'current_file_content_for_processing', 
+                                 'user_column_mapping', 'column_mapping_confirmed', 'initial_mapping_override_for_ui', 
+                                 'last_processed_file_id_for_mapping_ui', 'csv_headers_for_mapper_ui', 'detected_file_encoding',
+                                 'processed_data', 'filtered_data', 'kpi_results', 'kpi_confidence_intervals', 
+                                 'benchmark_daily_returns', 'max_drawdown_period_details', 'all_drawdown_periods', 
+                                 'last_analysis_run_signature', 'last_selected_file_label']
                 for k in keys_to_reset:
                     if k in st.session_state: del st.session_state[k]
             st.rerun()
@@ -380,7 +395,7 @@ if st.session_state.trigger_file_save_processing and st.session_state.pending_fi
         st.session_state.selected_user_file_id = record.id; st.session_state.trigger_file_load_id = record.id
         st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None
         st.session_state.initial_mapping_override_for_ui = None; st.session_state.last_processed_file_id_for_mapping_ui = None
-        st.session_state.csv_headers_for_mapper_ui = None; st.session_state.processed_data = None
+        st.session_state.csv_headers_for_mapper_ui = None; st.session_state.detected_file_encoding = None; st.session_state.processed_data = None
         logger.info(f"File '{original_name}' saved (ID: {record.id})."); st.rerun()
     else: display_custom_message(f"Failed to save file '{original_name}'.", "error")
 
@@ -395,6 +410,7 @@ if st.session_state.trigger_file_load_id:
         st.session_state.selected_user_file_id = file_id
         st.session_state.column_mapping_confirmed = False; st.session_state.user_column_mapping = None
         st.session_state.initial_mapping_override_for_ui = None; st.session_state.csv_headers_for_mapper_ui = None
+        st.session_state.detected_file_encoding = None # Reset encoding for newly loaded file
         st.session_state.processed_data = None; logger.info(f"File '{record.original_file_name}' loaded."); st.rerun()
     elif file_id: display_custom_message(f"Failed to load file ID {file_id}.", "error"); st.session_state.selected_user_file_id = None
 
@@ -408,39 +424,42 @@ if st.session_state.current_file_content_for_processing and \
         with st.spinner("Loading saved mapping (if any)..."):
             st.session_state.initial_mapping_override_for_ui = data_service.get_user_column_mapping(current_user_id, current_file_id_map)
         st.session_state.last_processed_file_id_for_mapping_ui = current_file_id_map
-        st.session_state.csv_headers_for_mapper_ui = None # Force header re-extraction for the new/selected file
+        st.session_state.csv_headers_for_mapper_ui = None 
+        st.session_state.detected_file_encoding = None # Reset encoding when file changes
 
-    if st.session_state.csv_headers_for_mapper_ui is None:
-        logger.info("Attempting to extract CSV headers for ColumnMapperUI.")
+    if st.session_state.csv_headers_for_mapper_ui is None or st.session_state.detected_file_encoding is None:
+        logger.info("Attempting to extract CSV headers and detect encoding for ColumnMapperUI.")
         st.session_state.current_file_content_for_processing.seek(0)
         try:
-            with st.spinner("Extracting column headers from CSV..."):
-                # Read a small chunk for chardet
+            with st.spinner("Extracting column headers & detecting encoding..."):
                 sample_bytes_for_header = st.session_state.current_file_content_for_processing.read(50*1024) # 50KB sample
-                st.session_state.current_file_content_for_processing.seek(0) # Reset for pd.read_csv
+                st.session_state.current_file_content_for_processing.seek(0) 
                 
-                detected_encoding_header = 'utf-8' # Default
+                temp_detected_encoding = 'utf-8' # Default
                 if sample_bytes_for_header:
                     try:
                         detected_header_info = chardet.detect(sample_bytes_for_header)
                         if detected_header_info and detected_header_info['encoding'] and detected_header_info['confidence'] > 0.5:
-                            detected_encoding_header = detected_header_info['encoding']
-                            logger.info(f"Header extraction: Detected encoding {detected_encoding_header} with confidence {detected_header_info['confidence']:.2f}")
+                            temp_detected_encoding = detected_header_info['encoding']
+                            logger.info(f"Header extraction: Detected encoding {temp_detected_encoding} with confidence {detected_header_info['confidence']:.2f}")
                         else:
                             logger.warning(f"Header extraction: Chardet low confidence or no encoding detected ({detected_header_info}). Defaulting to utf-8, then latin1.")
                     except Exception as e_chardet_header:
                         logger.error(f"Header extraction: Chardet failed: {e_chardet_header}. Defaulting to utf-8, then latin1.")
+                
+                st.session_state.detected_file_encoding = temp_detected_encoding # Store detected encoding
 
                 try:
-                    temp_df_for_headers = pd.read_csv(st.session_state.current_file_content_for_processing, nrows=0, engine='python', skipinitialspace=True, encoding=detected_encoding_header)
-                except UnicodeDecodeError: # Fallback if chardet or utf-8 failed
-                    logger.warning(f"Header extraction: Failed with {detected_encoding_header}, trying latin1.")
+                    temp_df_for_headers = pd.read_csv(st.session_state.current_file_content_for_processing, nrows=0, engine='python', skipinitialspace=True, encoding=st.session_state.detected_file_encoding)
+                except UnicodeDecodeError: 
+                    logger.warning(f"Header extraction: Failed with {st.session_state.detected_file_encoding}, trying latin1.")
                     st.session_state.current_file_content_for_processing.seek(0)
-                    temp_df_for_headers = pd.read_csv(st.session_state.current_file_content_for_processing, nrows=0, engine='python', skipinitialspace=True, encoding='latin1')
+                    st.session_state.detected_file_encoding = 'latin1' # Update detected encoding
+                    temp_df_for_headers = pd.read_csv(st.session_state.current_file_content_for_processing, nrows=0, engine='python', skipinitialspace=True, encoding=st.session_state.detected_file_encoding)
                 
                 st.session_state.csv_headers_for_mapper_ui = temp_df_for_headers.columns.tolist()
-                st.session_state.current_file_content_for_processing.seek(0) # Reset pointer for ColumnMapperUI's own preview
-                logger.info(f"Successfully extracted headers: {st.session_state.csv_headers_for_mapper_ui}")
+                st.session_state.current_file_content_for_processing.seek(0) 
+                logger.info(f"Successfully extracted headers: {st.session_state.csv_headers_for_mapper_ui} using encoding: {st.session_state.detected_file_encoding}")
 
             if not st.session_state.csv_headers_for_mapper_ui:
                 logger.error("CSV header extraction resulted in an empty list.")
@@ -455,16 +474,16 @@ if st.session_state.current_file_content_for_processing and \
             display_custom_message(f"Error reading CSV headers: {e_header}. Ensure valid CSV.", "error")
             st.session_state.current_file_content_for_processing = None; st.stop()
     
-    # Only render ColumnMapperUI if headers are successfully populated
-    if st.session_state.csv_headers_for_mapper_ui:
+    if st.session_state.csv_headers_for_mapper_ui and st.session_state.detected_file_encoding:
         with st.container():
             column_mapper = ColumnMapperUI(
                 st.session_state.uploaded_file_name,
-                st.session_state.current_file_content_for_processing, # Pass full BytesIO for its internal preview
-                st.session_state.csv_headers_for_mapper_ui, # Pass extracted headers
+                st.session_state.current_file_content_for_processing,
+                st.session_state.csv_headers_for_mapper_ui,
                 CONCEPTUAL_COLUMNS, CONCEPTUAL_COLUMN_TYPES, CONCEPTUAL_COLUMN_SYNONYMS,
                 CRITICAL_CONCEPTUAL_COLUMNS, CONCEPTUAL_COLUMN_CATEGORIES,
-                st.session_state.initial_mapping_override_for_ui
+                st.session_state.initial_mapping_override_for_ui,
+                detected_encoding=st.session_state.detected_file_encoding # Pass detected encoding
             )
             mapping_result = column_mapper.render()
             if mapping_result:
@@ -474,14 +493,14 @@ if st.session_state.current_file_content_for_processing and \
                 st.session_state.processed_data = None; st.session_state.last_analysis_run_signature = None; st.rerun()
             else:
                 display_custom_message("Please complete column mapping to proceed.", "info", icon="⚙️")
-                st.stop() # Stop if mapping not confirmed, to prevent further execution with incomplete state
-    # else:
-        # This case implies headers are still None, spinner for header extraction should be active,
-        # or an error was shown and st.stop() was called.
-        # logger.debug("app.py: csv_headers_for_mapper_ui is None, ColumnMapperUI not rendered yet.")
+                st.stop() 
 
 if st.session_state.current_file_content_for_processing and st.session_state.user_column_mapping and st.session_state.column_mapping_confirmed:
-    sig_parts = (st.session_state.selected_user_file_id, tuple(sorted(st.session_state.user_column_mapping.items())) if st.session_state.user_column_mapping else None, st.session_state.risk_free_rate, st.session_state.selected_benchmark_ticker, st.session_state.initial_capital, tuple(sorted(st.session_state.global_date_filter_range)) if st.session_state.global_date_filter_range else None, st.session_state.global_symbol_filter, st.session_state.global_strategy_filter)
+    sig_parts = (st.session_state.selected_user_file_id, tuple(sorted(st.session_state.user_column_mapping.items())) if st.session_state.user_column_mapping else None, 
+                 st.session_state.risk_free_rate, st.session_state.selected_benchmark_ticker, st.session_state.initial_capital, 
+                 tuple(sorted(st.session_state.global_date_filter_range)) if st.session_state.global_date_filter_range else None, 
+                 st.session_state.global_symbol_filter, st.session_state.global_strategy_filter,
+                 st.session_state.detected_file_encoding) # Include encoding in signature
     current_sig = hash(sig_parts)
     if st.session_state.last_analysis_run_signature != current_sig or st.session_state.processed_data is None:
         logger.info("Analysis inputs changed or data not processed. Re-running analysis.")
@@ -490,6 +509,7 @@ if st.session_state.current_file_content_for_processing and st.session_state.use
                 user_file_content=st.session_state.current_file_content_for_processing,
                 user_column_mapping=st.session_state.user_column_mapping,
                 original_file_name=st.session_state.uploaded_file_name,
+                detected_encoding=st.session_state.detected_file_encoding, # Pass detected encoding
                 filters={'selected_date_range': st.session_state.global_date_filter_range, 'selected_symbol': st.session_state.global_symbol_filter, 'selected_strategy': st.session_state.global_strategy_filter},
                 risk_free_rate=st.session_state.risk_free_rate,
                 benchmark_ticker=st.session_state.selected_benchmark_ticker,
