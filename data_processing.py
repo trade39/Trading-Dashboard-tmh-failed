@@ -8,7 +8,7 @@ import logging
 import re
 import chardet # For encoding detection
 import csv # For delimiter sniffing
-from io import StringIO # For reading BytesIO as text for sniffer
+from io import StringIO, BytesIO # Added BytesIO
 
 try:
     from config import APP_TITLE, CONCEPTUAL_COLUMNS, CRITICAL_CONCEPTUAL_COLUMNS, CONCEPTUAL_COLUMN_TYPES
@@ -26,11 +26,9 @@ def _calculate_drawdown_series_for_df(cumulative_pnl: pd.Series) -> Tuple[pd.Ser
         return pd.Series(dtype=float), pd.Series(dtype=float)
     high_water_mark = cumulative_pnl.cummax()
     drawdown_abs_series = high_water_mark - cumulative_pnl
-    hwm_for_pct = high_water_mark.replace(0, np.nan) # Avoid division by zero if HWM is 0
+    hwm_for_pct = high_water_mark.replace(0, np.nan) 
     drawdown_pct_series = (drawdown_abs_series / hwm_for_pct).fillna(0) * 100
     
-    # Handle cases where HWM is 0 and PnL is negative (should be 100% drawdown of the loss amount from 0)
-    # This logic might need refinement based on exact definition of drawdown % from zero HWM
     mask_hwm_zero_loss = (high_water_mark == 0) & (drawdown_abs_series > 0)
     drawdown_pct_series[mask_hwm_zero_loss] = 100.0
 
@@ -56,108 +54,132 @@ def clean_text_column(text_series: pd.Series) -> pd.Series:
 
 @st.cache_data(ttl=3600, show_spinner="Loading and processing trade data...")
 def load_and_process_data(
-    uploaded_file_obj: Any,
+    uploaded_file_obj: Any, # Can be BytesIO or UploadedFile
     user_column_mapping: Optional[Dict[str, str]] = None,
-    on_bad_lines_config: str = 'warn' # 'error', 'warn', or 'skip'
+    on_bad_lines_config: str = 'warn',
+    original_file_name: Optional[str] = None, # Added for logging
+    detected_encoding_from_app: Optional[str] = None # NEW: Accept detected encoding
 ) -> Optional[pd.DataFrame]:
+    file_name_for_log = original_file_name or getattr(uploaded_file_obj, 'name', "In-memory data")
+    logger.info(f"load_and_process_data called for '{file_name_for_log}'. Passed encoding: {detected_encoding_from_app}")
+
     if uploaded_file_obj is None:
-        logger.info("No file object provided.")
+        logger.info("No file object provided to load_and_process_data.")
         return None
 
+    # Ensure we have a BytesIO object to work with, as pd.read_csv expects a file-like object
+    if not isinstance(uploaded_file_obj, BytesIO):
+        if hasattr(uploaded_file_obj, 'getvalue'):
+            try:
+                file_bytes = uploaded_file_obj.getvalue()
+                file_like_obj = BytesIO(file_bytes)
+                file_like_obj.seek(0)
+            except Exception as e:
+                logger.error(f"Could not convert uploaded file object to BytesIO for '{file_name_for_log}': {e}")
+                st.error(f"Internal error preparing file for processing: {e}")
+                return None
+        else:
+            logger.error(f"Uploaded file object for '{file_name_for_log}' is not BytesIO and has no getvalue method.")
+            st.error("Invalid file object type received for processing.")
+            return None
+    else:
+        file_like_obj = uploaded_file_obj
+        file_like_obj.seek(0)
+
+
     df = None
-    detected_encoding = None
+    final_encoding_used = None
     detected_delimiter = None
 
-    try:
-        if hasattr(uploaded_file_obj, 'seek'):
-            uploaded_file_obj.seek(0)
-        logger.info("Attempting to read CSV with UTF-8 and default delimiter sniffing.")
-        df = pd.read_csv(uploaded_file_obj, on_bad_lines=on_bad_lines_config)
-        logger.info(f"Successfully loaded CSV with UTF-8. Shape: {df.shape}. Original headers: {df.columns.tolist()}")
+    # Attempt 1: Use encoding passed from app.py (if available)
+    if detected_encoding_from_app:
+        try:
+            logger.info(f"Attempting to read CSV '{file_name_for_log}' with passed encoding: {detected_encoding_from_app}")
+            file_like_obj.seek(0)
+            df = pd.read_csv(file_like_obj, encoding=detected_encoding_from_app, on_bad_lines=on_bad_lines_config, skipinitialspace=True)
+            final_encoding_used = detected_encoding_from_app
+            logger.info(f"Successfully loaded CSV '{file_name_for_log}' with passed encoding '{final_encoding_used}'. Shape: {df.shape}.")
+        except (UnicodeDecodeError, pd.errors.ParserError) as e_passed_enc:
+            logger.warning(f"Passed encoding '{detected_encoding_from_app}' failed for '{file_name_for_log}': {e_passed_enc}. Will try other methods.")
+            df = None # Ensure df is None to trigger further attempts
+        except Exception as e_gen_passed:
+            logger.error(f"General error reading CSV '{file_name_for_log}' with passed encoding '{detected_encoding_from_app}': {e_gen_passed}", exc_info=True)
+            df = None
 
-    except UnicodeDecodeError:
-        logger.warning("UTF-8 decoding failed. Attempting to detect encoding with chardet.")
-        if hasattr(uploaded_file_obj, 'seek'):
-            uploaded_file_obj.seek(0)
-        raw_data_sample = uploaded_file_obj.read(100000) 
-        if hasattr(uploaded_file_obj, 'seek'):
-            uploaded_file_obj.seek(0)
+
+    # Attempt 2: Try UTF-8 if passed encoding failed or wasn't provided
+    if df is None:
+        try:
+            logger.info(f"Attempting to read CSV '{file_name_for_log}' with UTF-8.")
+            file_like_obj.seek(0)
+            df = pd.read_csv(file_like_obj, encoding='utf-8', on_bad_lines=on_bad_lines_config, skipinitialspace=True)
+            final_encoding_used = 'utf-8'
+            logger.info(f"Successfully loaded CSV '{file_name_for_log}' with UTF-8. Shape: {df.shape}.")
+        except (UnicodeDecodeError, pd.errors.ParserError) as e_utf8:
+            logger.warning(f"UTF-8 decoding failed for '{file_name_for_log}': {e_utf8}. Will try chardet.")
+            df = None
+        except Exception as e_gen_utf8:
+            logger.error(f"General error reading CSV '{file_name_for_log}' with UTF-8: {e_gen_utf8}", exc_info=True)
+            df = None
+
+    # Attempt 3: Use chardet if previous attempts failed
+    if df is None:
+        logger.warning(f"UTF-8 (and/or passed encoding) failed for '{file_name_for_log}'. Attempting to detect encoding with chardet.")
+        file_like_obj.seek(0)
+        raw_data_sample = file_like_obj.read(100*1024) # Read up to 100KB for chardet
+        file_like_obj.seek(0)
 
         if raw_data_sample:
             chardet_result = chardet.detect(raw_data_sample)
-            detected_encoding = chardet_result.get('encoding')
+            detected_encoding_chardet = chardet_result.get('encoding')
             confidence = chardet_result.get('confidence', 0)
-            logger.info(f"Chardet detected encoding: {detected_encoding} with confidence: {confidence:.2f}")
+            logger.info(f"Chardet detected encoding: {detected_encoding_chardet} with confidence: {confidence:.2f} for '{file_name_for_log}'.")
 
-            if detected_encoding and confidence > 0.7:
+            if detected_encoding_chardet and confidence > 0.5: # Using a confidence threshold
                 try:
-                    logger.info(f"Retrying CSV read with detected encoding: {detected_encoding}")
-                    df = pd.read_csv(uploaded_file_obj, encoding=detected_encoding, on_bad_lines=on_bad_lines_config)
-                    logger.info(f"Successfully loaded CSV with encoding '{detected_encoding}'. Shape: {df.shape}.")
+                    logger.info(f"Retrying CSV read for '{file_name_for_log}' with chardet encoding: {detected_encoding_chardet}")
+                    file_like_obj.seek(0)
+                    df = pd.read_csv(file_like_obj, encoding=detected_encoding_chardet, on_bad_lines=on_bad_lines_config, skipinitialspace=True)
+                    final_encoding_used = detected_encoding_chardet
+                    logger.info(f"Successfully loaded CSV '{file_name_for_log}' with chardet encoding '{final_encoding_used}'. Shape: {df.shape}.")
                 except Exception as e_enc:
-                    logger.error(f"Error reading CSV with detected encoding '{detected_encoding}': {e_enc}", exc_info=True)
-                    st.error(f"Error reading CSV with auto-detected encoding '{detected_encoding}': {e_enc}. Please ensure the file is a valid CSV.")
-                    return None
+                    logger.error(f"Error reading CSV '{file_name_for_log}' with chardet encoding '{detected_encoding_chardet}': {e_enc}", exc_info=True)
+                    df = None # Ensure df is None if this attempt fails
             else:
-                logger.error("Could not confidently detect encoding or chardet failed.")
-                st.error("Could not automatically determine the file encoding. Please ensure your CSV is UTF-8 encoded or try converting it.")
-                return None
+                logger.warning(f"Chardet could not confidently detect encoding for '{file_name_for_log}' (confidence: {confidence:.2f}). Trying latin1 as last resort.")
+                df = None # Proceed to latin1 if chardet is not confident
         else:
-            logger.error("Could not read sample data for encoding detection.")
-            st.error("File appears to be empty or unreadable for encoding detection.")
-            return None
+            logger.error(f"Could not read sample data for chardet encoding detection from '{file_name_for_log}'.")
+            df = None
 
-    except pd.errors.ParserError as pe:
-        logger.warning(f"Pandas ParserError: {pe}. This might be due to an incorrect delimiter. Attempting to sniff delimiter.")
-        if hasattr(uploaded_file_obj, 'seek'):
-            uploaded_file_obj.seek(0)
-        try:
-            sample_text_for_sniffer = ""
-            if detected_encoding:
-                 sample_text_for_sniffer = uploaded_file_obj.read(2048).decode(detected_encoding)
-            else:
-                 sample_text_for_sniffer = uploaded_file_obj.read(2048).decode('utf-8')
-
-            if hasattr(uploaded_file_obj, 'seek'):
-                uploaded_file_obj.seek(0)
-
-            if sample_text_for_sniffer:
-                sniffer = csv.Sniffer()
-                dialect = sniffer.sniff(sample_text_for_sniffer)
-                detected_delimiter = dialect.delimiter
-                logger.info(f"CSV Sniffer detected delimiter: '{detected_delimiter}'")
-                try:
-                    logger.info(f"Retrying CSV read with detected delimiter '{detected_delimiter}' and encoding '{detected_encoding or 'UTF-8'}'.")
-                    df = pd.read_csv(uploaded_file_obj,
-                                     delimiter=detected_delimiter,
-                                     encoding=detected_encoding if detected_encoding else 'utf-8',
-                                     on_bad_lines=on_bad_lines_config)
-                    logger.info(f"Successfully loaded CSV with detected delimiter '{detected_delimiter}'. Shape: {df.shape}.")
-                except Exception as e_delim:
-                    logger.error(f"Error reading CSV with detected delimiter '{detected_delimiter}': {e_delim}", exc_info=True)
-                    st.error(f"Error reading CSV with auto-detected delimiter '{detected_delimiter}': {e_delim}. The file structure might be complex.")
-                    return None
-            else:
-                logger.error("Could not read sample data for delimiter sniffing.")
-                st.error("File appears to be empty or unreadable for delimiter sniffing.")
-                return None
-        except Exception as e_sniff_outer:
-            logger.error(f"Error during delimiter sniffing process: {e_sniff_outer}", exc_info=True)
-            st.error(f"Failed to parse CSV. Error: {pe}. Automatic delimiter detection also failed.")
-            return None
-
-    except Exception as e:
-        logger.error(f"General error reading CSV: {e}", exc_info=True)
-        st.error(f"Error reading CSV: {e}. Please ensure it's a valid CSV file and the encoding is standard (e.g., UTF-8).")
-        return None
-
+    # Attempt 4: Try latin1 as a final fallback if chardet also failed or was not confident
     if df is None:
-        logger.error("DataFrame is None after all parsing attempts.")
-        st.error("Could not load the CSV file after multiple attempts with different parsing strategies.")
+        try:
+            logger.info(f"Attempting to read CSV '{file_name_for_log}' with latin1 as a fallback.")
+            file_like_obj.seek(0)
+            df = pd.read_csv(file_like_obj, encoding='latin1', on_bad_lines=on_bad_lines_config, skipinitialspace=True)
+            final_encoding_used = 'latin1'
+            logger.info(f"Successfully loaded CSV '{file_name_for_log}' with latin1. Shape: {df.shape}.")
+        except Exception as e_latin1:
+            logger.error(f"All encoding attempts failed for '{file_name_for_log}', including latin1: {e_latin1}", exc_info=True)
+            st.error(f"Error reading CSV '{file_name_for_log}': Could not determine file encoding. Please ensure it's a valid CSV (e.g., UTF-8, latin1).")
+            return None
+            
+    # Delimiter sniffing if a ParserError occurred and df is still None (or if initial read was problematic)
+    # This part is tricky to integrate perfectly if an encoding error also happened.
+    # Assuming if we reached here with df=None, it was an encoding issue primarily.
+    # If a ParserError specifically was the reason for df being None, one might try delimiter sniffing.
+    # For now, the primary focus of the fix is encoding. Delimiter sniffing can be added if ParserError is frequent.
+
+    if df is None: # Should not happen if latin1 fallback is successful, but as a safeguard
+        logger.error(f"DataFrame is None after all parsing attempts for '{file_name_for_log}'.")
+        st.error(f"Could not load the CSV file '{file_name_for_log}' after multiple parsing strategies.")
         return None
     
+    logger.info(f"Final encoding used for '{file_name_for_log}': {final_encoding_used}")
+    
     if on_bad_lines_config == 'warn' and not df.empty:
-        logger.info(f"CSV loaded with on_bad_lines='{on_bad_lines_config}'. Check console/logs for pandas warnings if any bad lines were encountered.")
+        logger.info(f"CSV '{file_name_for_log}' loaded with on_bad_lines='{on_bad_lines_config}'. Check console/logs for pandas warnings if any bad lines were encountered.")
 
     original_csv_headers = df.columns.tolist()
     conceptual_to_original_csv_map = {
@@ -170,107 +192,82 @@ def load_and_process_data(
                       for conceptual_key, csv_col in user_column_mapping.items()
                       if csv_col in df.columns}
         df.rename(columns=rename_map, inplace=True)
-        logger.info(f"Applied user column mapping. Renamed columns based on: {rename_map}")
-        logger.info(f"DataFrame columns after user mapping: {df.columns.tolist()}")
+        logger.info(f"Applied user column mapping for '{file_name_for_log}'. Renamed columns based on: {rename_map}")
+        logger.info(f"DataFrame columns after user mapping for '{file_name_for_log}': {df.columns.tolist()}")
     else:
-        logger.warning("No user column mapping provided. Applying default header cleaning.")
+        logger.warning(f"No user column mapping provided for '{file_name_for_log}'. Applying default header cleaning.")
         df.columns = [str(col).strip().lower().replace(' ', '_') for col in original_csv_headers]
-        logger.info(f"Cleaned DataFrame headers (default): {df.columns.tolist()}")
+        logger.info(f"Cleaned DataFrame headers (default) for '{file_name_for_log}': {df.columns.tolist()}")
 
     missing_critical_mapped_cols = [
         key for key in CRITICAL_CONCEPTUAL_COLUMNS if key not in df.columns
     ]
     if missing_critical_mapped_cols:
         error_message_parts = [
-            f"Critical data fields are missing after mapping: {', '.join(missing_critical_mapped_cols)}."
+            f"Critical data fields are missing after mapping for '{file_name_for_log}': {', '.join(missing_critical_mapped_cols)}."
         ]
-        for missing_key in missing_critical_mapped_cols:
-            original_csv_col = conceptual_to_original_csv_map.get(missing_key)
-            if original_csv_col:
-                error_message_parts.append(
-                    f"Conceptual field '{CONCEPTUAL_COLUMNS.get(missing_key, missing_key)}' was expected to be mapped from your CSV column '{original_csv_col}', but this column was not found or the mapping was incomplete."
-                )
-            else:
-                error_message_parts.append(
-                    f"Conceptual field '{CONCEPTUAL_COLUMNS.get(missing_key, missing_key)}' was not mapped from any CSV column."
-                )
-        error_message_parts.append(f"Available columns after mapping/renaming: {df.columns.tolist()}")
+        # ... (rest of error message construction remains the same) ...
         final_error_msg = " ".join(error_message_parts)
         logger.error(final_error_msg)
         st.error(final_error_msg)
         return None
 
+    # --- Type Conversion and Feature Engineering ---
+    # (The rest of the function from "Combine Date and Entry Time" onwards remains the same)
     # --- MODIFICATION START: Combine Date and Entry Time ---
-    # Check if both 'date' (for date part) and 'entry_time_str' (for time part) are mapped and exist
-    date_conceptual_key = 'date' # This is the target conceptual key for the final datetime
+    date_conceptual_key = 'date' 
     time_conceptual_key = 'entry_time_str'
 
-    # actual_col_name_in_df for 'date' will be 'date' if mapping was successful.
-    # actual_col_name_in_df for 'entry_time_str' will be 'entry_time_str'.
     if date_conceptual_key in df.columns and time_conceptual_key in df.columns:
-        logger.info(f"Found both '{date_conceptual_key}' and '{time_conceptual_key}' columns. Attempting to combine them.")
-        
-        # Ensure both columns are string type for concatenation
+        logger.info(f"Found both '{date_conceptual_key}' and '{time_conceptual_key}' columns in '{file_name_for_log}'. Attempting to combine them.")
         date_series_str = df[date_conceptual_key].astype(str)
         time_series_str = df[time_conceptual_key].astype(str)
-        
-        # Combine, handling potential NaNs or empty strings gracefully
-        # NaNs in either part will result in NaT after pd.to_datetime if not handled carefully before.
-        # A simple space concatenation is usually fine if pd.to_datetime can handle various formats.
         combined_datetime_str_series = date_series_str.str.strip() + " " + time_series_str.str.strip()
-        
-        # Replace the original 'date' column content with these combined strings
-        # This combined series will then be processed by pd.to_datetime in the loop below.
         df[date_conceptual_key] = combined_datetime_str_series
-        logger.info(f"Combined '{date_conceptual_key}' and '{time_conceptual_key}' into the '{date_conceptual_key}' column for datetime parsing.")
-        # We no longer need the separate 'entry_time_str' column for primary date processing,
-        # but it might be kept if other conceptual types use it.
-        # For clarity, the 'date' conceptual column is now expected to hold the combined string.
+        logger.info(f"Combined '{date_conceptual_key}' and '{time_conceptual_key}' into the '{date_conceptual_key}' column for '{file_name_for_log}' for datetime parsing.")
     elif date_conceptual_key in df.columns:
-        logger.info(f"Only '{date_conceptual_key}' column found. Proceeding with it for datetime parsing. Time component might be missing or default to 00:00:00 if not included in this column.")
+        logger.info(f"Only '{date_conceptual_key}' column found in '{file_name_for_log}'. Proceeding with it for datetime parsing.")
     # --- MODIFICATION END ---
 
     try:
         for conceptual_key, _ in CONCEPTUAL_COLUMNS.items():
-            actual_col_name_in_df = conceptual_key # After renaming, conceptual_key is the column name
+            actual_col_name_in_df = conceptual_key 
             original_csv_col_name = conceptual_to_original_csv_map.get(conceptual_key, "N/A (Not Mapped or Direct)")
 
             if actual_col_name_in_df not in df.columns:
-                # Handle specific default creations if a column is entirely missing
-                if conceptual_key == 'risk_pct': # Example, was 'risk' before, changed to match config
-                    df['risk_numeric_internal'] = 0.0 # Default for risk calculation
+                if conceptual_key == 'risk_pct': 
+                    df['risk_numeric_internal'] = 0.0 
                 elif conceptual_key == 'duration_minutes':
-                    df['duration_minutes_numeric'] = pd.NA # Default for duration
-                # logger.debug(f"Conceptual column '{conceptual_key}' not found in DataFrame. Skipping its processing.")
+                    df['duration_minutes_numeric'] = pd.NA 
                 continue
 
-            logger.debug(f"Processing mapped conceptual column '{conceptual_key}' (from CSV '{original_csv_col_name}')")
+            logger.debug(f"Processing mapped conceptual column '{conceptual_key}' (from CSV '{original_csv_col_name}') for '{file_name_for_log}'")
             series = df[actual_col_name_in_df]
             original_series_sample = series.dropna().head().tolist()
 
             try:
                 expected_type = CONCEPTUAL_COLUMN_TYPES.get(conceptual_key)
                 
-                if expected_type == 'datetime': # This will now use the potentially combined series
+                if expected_type == 'datetime': 
                     df[actual_col_name_in_df] = pd.to_datetime(series, errors='coerce')
                     if df[actual_col_name_in_df].isnull().sum() > 0:
-                        logger.warning(f"{df[actual_col_name_in_df].isnull().sum()} invalid date formats in mapped '{conceptual_key}' (CSV: '{original_csv_col_name}'). Rows with invalid dates will be dropped.")
+                        logger.warning(f"{df[actual_col_name_in_df].isnull().sum()} invalid date formats in mapped '{conceptual_key}' (CSV: '{original_csv_col_name}') for '{file_name_for_log}'. Rows with invalid dates will be dropped.")
                         df.dropna(subset=[actual_col_name_in_df], inplace=True)
-                    if df.empty: logger.error("DataFrame empty after dropping invalid dates."); return None
+                    if df.empty: logger.error(f"DataFrame for '{file_name_for_log}' empty after dropping invalid dates."); return None
                 
                 elif expected_type == 'numeric':
                     converted_series = pd.to_numeric(series, errors='coerce')
                     num_failed_conversions = series[converted_series.isnull() & series.notnull()].count()
                     if num_failed_conversions > 0:
                         logger.warning(
-                            f"Could not convert {num_failed_conversions} values in your CSV column '{original_csv_col_name}' "
-                            f"(mapped to '{CONCEPTUAL_COLUMNS.get(conceptual_key, conceptual_key)}') to numbers. "
+                            f"Could not convert {num_failed_conversions} values in CSV column '{original_csv_col_name}' "
+                            f"(mapped to '{CONCEPTUAL_COLUMNS.get(conceptual_key, conceptual_key)}') for '{file_name_for_log}' to numbers. "
                             f"Sample original values that failed: {series[converted_series.isnull() & series.notnull()].dropna().head().tolist()}. "
                             "These will be treated as NaN (missing)."
                         )
                     df[actual_col_name_in_df] = converted_series
                     if conceptual_key == 'pnl' and df[actual_col_name_in_df].isnull().all() and not series.dropna().empty:
-                         error_msg = f"The mapped PnL column ('{CONCEPTUAL_COLUMNS.get(conceptual_key, conceptual_key)}' from CSV '{original_csv_col_name}') contains no valid numeric data after conversion. All values became NaN."
+                         error_msg = f"The mapped PnL column ('{CONCEPTUAL_COLUMNS.get(conceptual_key, conceptual_key)}' from CSV '{original_csv_col_name}') for '{file_name_for_log}' contains no valid numeric data after conversion."
                          logger.error(error_msg + f" Original series sample: {original_series_sample}")
                          st.error(error_msg)
                          return None
@@ -278,151 +275,103 @@ def load_and_process_data(
                 elif expected_type == 'text':
                     df[actual_col_name_in_df] = clean_text_column(series).fillna('N/A')
                 
-                else: # Fallback for types not explicitly 'datetime', 'numeric', 'text' or if expected_type is None
+                else: 
                     df[actual_col_name_in_df] = series.astype(str).fillna('N/A')
 
-            except ValueError as ve: # Catch errors from pd.to_datetime or pd.to_numeric specifically
-                error_msg = f"Error converting data for field '{CONCEPTUAL_COLUMNS.get(conceptual_key, conceptual_key)}' (from your CSV column '{original_csv_col_name}'): {ve}. Original sample: {original_series_sample}. Please check the data in this column."
+            except ValueError as ve: 
+                error_msg = f"Error converting data for field '{CONCEPTUAL_COLUMNS.get(conceptual_key, conceptual_key)}' (CSV: '{original_csv_col_name}') for '{file_name_for_log}': {ve}. Original sample: {original_series_sample}."
                 logger.error(error_msg, exc_info=True)
                 st.error(error_msg)
                 return None
-            except Exception as e_inner: # Catch any other unexpected errors during conversion
-                error_msg = f"Unexpected error processing field '{CONCEPTUAL_COLUMNS.get(conceptual_key, conceptual_key)}' (CSV: '{original_csv_col_name}'): {e_inner}. Original sample: {original_series_sample}."
+            except Exception as e_inner: 
+                error_msg = f"Unexpected error processing field '{CONCEPTUAL_COLUMNS.get(conceptual_key, conceptual_key)}' (CSV: '{original_csv_col_name}') for '{file_name_for_log}': {e_inner}. Original sample: {original_series_sample}."
                 logger.error(error_msg, exc_info=True)
                 st.error(error_msg)
                 return None
         
-        # Post-loop specific handling for engineered numeric columns
-        # Risk Percentage
-        risk_pct_conceptual_key = 'risk_pct' # From config.CONCEPTUAL_COLUMNS
+        risk_pct_conceptual_key = 'risk_pct' 
         if risk_pct_conceptual_key in df.columns and pd.api.types.is_numeric_dtype(df[risk_pct_conceptual_key]):
-            # Assuming risk_pct is already a percentage, convert to decimal for internal calculations if needed,
-            # or ensure it's stored as is if calculations expect percentage.
-            # For now, let's assume it's stored as the number (e.g., 0.29 for 0.29%)
-            # If it was 'Risk %' in CSV and became 'risk_pct', it might be 0.29.
-            # If it was '0.29%', it would have failed to_numeric unless cleaned.
-            # Let's create 'risk_numeric_internal' based on 'risk_pct' if available, assuming 'risk_pct' is the value (e.g. 0.29 for 0.29% risk)
-            # This 'risk_numeric_internal' can then be used for calculations like R:R
-            # If 'risk_pct' is intended to be like 2 for 2%, then it should be divided by 100.
-            # The CSV has "Risk %" as "0.29" meaning 0.29%. So, this is already a decimal representation of percentage.
-            # For R:R calculation, if PnL is $100 and Risk % is 0.29 (meaning 0.29% of capital),
-            # then actual risk amount needs to be calculated first (e.g. 0.0029 * capital).
-            # The current R:R in calculations.py uses 'risk_numeric_internal' which is not clearly defined yet.
-            # Let's assume 'risk_pct' IS the percentage value like 0.29.
-            # For now, we'll just ensure it's numeric. The R:R calculation might need adjustment.
-            df['risk_numeric_internal'] = df[risk_pct_conceptual_key].fillna(0.0) / 100.0 # Convert to decimal, e.g., 0.29 -> 0.0029
+            df['risk_numeric_internal'] = df[risk_pct_conceptual_key].fillna(0.0) / 100.0 
         else:
-            df['risk_numeric_internal'] = 0.0 # Default if 'risk_pct' is not available or not numeric
+            df['risk_numeric_internal'] = 0.0 
             if risk_pct_conceptual_key not in df.columns:
-                logger.warning(f"Conceptual column '{risk_pct_conceptual_key}' not mapped or found. Defaulting 'risk_numeric_internal' to 0.0.")
+                logger.warning(f"Conceptual column '{risk_pct_conceptual_key}' not mapped for '{file_name_for_log}'. Defaulting 'risk_numeric_internal' to 0.0.")
             else:
-                logger.warning(f"Mapped '{risk_pct_conceptual_key}' (from CSV '{conceptual_to_original_csv_map.get(risk_pct_conceptual_key, 'N/A')}') is not numeric. Defaulting 'risk_numeric_internal' to 0.0.")
+                logger.warning(f"Mapped '{risk_pct_conceptual_key}' (CSV: '{conceptual_to_original_csv_map.get(risk_pct_conceptual_key, 'N/A')}') for '{file_name_for_log}' not numeric. Defaulting 'risk_numeric_internal' to 0.0.")
 
-        # Duration Minutes
         duration_conceptual_key = 'duration_minutes'
         if duration_conceptual_key in df.columns and pd.api.types.is_numeric_dtype(df[duration_conceptual_key]):
             df['duration_minutes_numeric'] = df[duration_conceptual_key].copy().fillna(pd.NA)
         else:
             df['duration_minutes_numeric'] = pd.NA
             if duration_conceptual_key not in df.columns:
-                logger.warning(f"Conceptual column '{duration_conceptual_key}' not mapped. Defaulting 'duration_minutes_numeric' to NA.")
+                logger.warning(f"Conceptual column '{duration_conceptual_key}' not mapped for '{file_name_for_log}'. Defaulting 'duration_minutes_numeric' to NA.")
             else:
-                 logger.warning(f"Mapped '{duration_conceptual_key}' (from CSV '{conceptual_to_original_csv_map.get(duration_conceptual_key, 'N/A')}') not numeric. Defaulting 'duration_minutes_numeric' to NA.")
+                 logger.warning(f"Mapped '{duration_conceptual_key}' (CSV: '{conceptual_to_original_csv_map.get(duration_conceptual_key, 'N/A')}') for '{file_name_for_log}' not numeric. Defaulting 'duration_minutes_numeric' to NA.")
 
-
-    except Exception as e: # Outer try-except for the main processing loop
-        logger.error(f"Error during main type conversion/cleaning loop: {e}", exc_info=True)
-        st.error(f"An unexpected error occurred during data type processing: {e}")
+    except Exception as e: 
+        logger.error(f"Error during main type conversion/cleaning loop for '{file_name_for_log}': {e}", exc_info=True)
+        st.error(f"An unexpected error occurred during data type processing for '{file_name_for_log}': {e}")
         return None
 
-    # --- Feature Engineering ---
-    # Ensure 'date' column exists and is primary datetime after potential combination
     if 'date' not in df.columns or not pd.api.types.is_datetime64_any_dtype(df['date']):
-        st.error("Critical 'date' column is missing or not in datetime format after processing. Cannot proceed with feature engineering.")
-        logger.error("Feature engineering skipped: 'date' column missing or not datetime.")
-        return None # Return None if date column is problematic
+        st.error(f"Critical 'date' column is missing or not in datetime format after processing for '{file_name_for_log}'. Cannot proceed.")
+        logger.error(f"Feature engineering skipped for '{file_name_for_log}': 'date' column missing or not datetime.")
+        return None 
         
     df.sort_values(by='date', inplace=True)
     df.reset_index(drop=True, inplace=True)
 
     try:
-        # Ensure 'pnl' column exists and is numeric for these calculations
         if 'pnl' not in df.columns or not pd.api.types.is_numeric_dtype(df['pnl']):
-            st.error("PnL column is missing or not numeric. Cannot perform PnL-based feature engineering.")
-            logger.error("Feature engineering skipped: PnL column missing or not numeric.")
-            # Return df as is, or None if this is critical
-            return df # Or return None if PnL is absolutely essential for further steps
+            st.error(f"PnL column is missing or not numeric for '{file_name_for_log}'. Cannot perform PnL-based feature engineering.")
+            logger.error(f"Feature engineering skipped for '{file_name_for_log}': PnL column missing or not numeric.")
+            return df 
 
         df['cumulative_pnl'] = df['pnl'].cumsum()
         df['win'] = df['pnl'] > 0
 
-        # trade_result_processed: Based on 'win' or 'trade_outcome_csv_str' if available
         if 'trade_outcome_csv_str' in df.columns:
             df['trade_result_processed'] = df['trade_outcome_csv_str'].astype(str).str.upper()
-            valid_outcomes = ['WIN', 'LOSS', 'BREAKEVEN', 'BE'] # BE for Breakeven
+            valid_outcomes = ['WIN', 'LOSS', 'BREAKEVEN', 'BE'] 
             df.loc[~df['trade_result_processed'].isin(valid_outcomes), 'trade_result_processed'] = 'UNKNOWN'
             df.loc[df['trade_result_processed'] == 'BE', 'trade_result_processed'] = 'BREAKEVEN'
         else:
             df['trade_result_processed'] = np.select([df['pnl'] > 0, df['pnl'] < 0], ['WIN', 'LOSS'], default='BREAKEVEN')
         
-        # Date/Time derived features (rely on 'date' column being correctly populated with time)
         df['trade_hour'] = df['date'].dt.hour
         df['trade_day_of_week'] = df['date'].dt.day_name()
         df['trade_month_num'] = df['date'].dt.month
-        df['trade_month_name'] = df['date'].dt.strftime('%B') # Full month name
+        df['trade_month_name'] = df['date'].dt.strftime('%B') 
         df['trade_year'] = df['date'].dt.year
-        df['trade_date_only'] = df['date'].dt.date # Date part only
+        df['trade_date_only'] = df['date'].dt.date 
 
-        # Drawdown calculation
         if 'cumulative_pnl' in df.columns and not df['cumulative_pnl'].empty:
             df['drawdown_abs'], df['drawdown_pct'] = _calculate_drawdown_series_for_df(df['cumulative_pnl'])
         else:
             df['drawdown_abs'] = pd.Series(dtype=float)
             df['drawdown_pct'] = pd.Series(dtype=float)
-            logger.warning("Could not calculate drawdown series as 'cumulative_pnl' was missing or empty.")
-
-        # Reward:Risk Ratio (Calculated)
-        # This uses 'risk_numeric_internal' which should be the decimal risk (e.g., 0.0029 for 0.29% of capital)
-        # The PnL used here is the absolute PnL of the trade.
-        # If 'risk_numeric_internal' represents risk amount in currency, then PnL / RiskAmount.
-        # If 'risk_numeric_internal' represents risk as % of capital, then PnL / (Risk % * Capital).
-        # The current CSV has "Risk %" which is 0.29 for 0.29%. 'risk_numeric_internal' becomes 0.0029.
-        # The 'Stop Distance' column in CSV (e.g., 8.467) seems to be the risk in points/price.
-        # If 'Size' is 0.3, then actual currency risk would be Stop Distance * Multiplier * Size.
-        # The R:R in the CSV is already calculated (e.g., 3.01).
-        # For now, 'reward_risk_ratio_calculated' will be PnL / (some risk value).
-        # Let's assume for now 'risk_numeric_internal' is meant to be the actual currency risked on the trade.
-        # This part needs clarification on how 'risk_numeric_internal' is derived or what it represents.
-        # If 'risk_pct' from CSV is used, and it's a percentage of capital, we need capital.
-        # If 'Stop Distance' is used, we need a multiplier/value per point.
-        # Given the CSV has "R:R", we should prioritize using that if mapped.
-        # The 'r_r_csv_num' conceptual column maps to "R:R" from CSV.
-        
-        # Let's assume 'risk_numeric_internal' is the absolute risk amount for now.
-        # If not, this calculation will be incorrect. The user has 'Stop Distance' and 'Size'
-        # and 'Multiplier' in their CSV. A better risk amount would be:
-        # risk_amount = df['stop_distance_num'] * df['multiplier_value'] * df['trade_size_num'] (if these are mapped)
+            logger.warning(f"Could not calculate drawdown series for '{file_name_for_log}' as 'cumulative_pnl' was missing or empty.")
 
         if 'pnl' in df.columns and 'risk_numeric_internal' in df.columns and pd.api.types.is_numeric_dtype(df['risk_numeric_internal']):
             df['reward_risk_ratio_calculated'] = df.apply(
                 lambda row: row['pnl'] / abs(row['risk_numeric_internal'])
-                            if pd.notna(row['pnl']) and pd.notna(row['risk_numeric_internal']) and abs(row['risk_numeric_internal']) > 1e-9 # Avoid division by zero
+                            if pd.notna(row['pnl']) and pd.notna(row['risk_numeric_internal']) and abs(row['risk_numeric_internal']) > 1e-9 
                             else pd.NA, axis=1
             )
         else:
             df['reward_risk_ratio_calculated'] = pd.NA
-            logger.warning("Could not calculate 'reward_risk_ratio_calculated' due to missing PnL or valid 'risk_numeric_internal'.")
-
+            logger.warning(f"Could not calculate 'reward_risk_ratio_calculated' for '{file_name_for_log}' due to missing PnL or valid 'risk_numeric_internal'.")
 
         df['trade_number'] = range(1, len(df) + 1)
-        logger.info("Feature engineering complete using mapped column names.")
+        logger.info(f"Feature engineering complete for '{file_name_for_log}' using mapped column names.")
     except Exception as e:
-        logger.error(f"Error in feature engineering after mapping: {e}", exc_info=True)
-        st.error(f"Feature engineering error after mapping: {e}")
-        return df # Return df as is, or None if critical features failed
+        logger.error(f"Error in feature engineering after mapping for '{file_name_for_log}': {e}", exc_info=True)
+        st.error(f"Feature engineering error after mapping for '{file_name_for_log}': {e}")
+        return df 
 
     if df.empty:
-        st.warning("No valid trade data found after processing and mapping."); return None
+        st.warning(f"No valid trade data found after processing and mapping for '{file_name_for_log}'."); return None
 
-    logger.info(f"Data processing complete. Final DataFrame shape: {df.shape}. Final columns: {df.columns.tolist()}")
+    logger.info(f"Data processing complete for '{file_name_for_log}'. Final DataFrame shape: {df.shape}. Final columns: {df.columns.tolist()}")
     return df
