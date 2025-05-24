@@ -475,7 +475,7 @@ if active_file_content_to_process and active_file_name_for_processing:
     if st.session_state.column_mapping_confirmed and st.session_state.user_column_mapping:
         # Process data if it's a new file, new mapping, or data hasn't been processed yet
         if st.session_state.last_processed_file_id != active_processing_file_identifier or \
-           st.session_state.processed_data is None:
+           st.session_state.processed_data is None: # Check for None explicitly
             
             with st.spinner(f"Processing '{active_file_name_for_processing}' with selected mapping..."):
                 # Ensure active_file_content_to_process is reset before passing
@@ -703,20 +703,26 @@ def main_page_layout():
     st.markdown("</div></div>", unsafe_allow_html=True)
 
 # Determine what to display in the main area
-# Show welcome/initial page if no file content is active AND (no mapping is confirmed OR no data is processed)
-# This means if a file is loaded but not yet mapped/processed, we don't show welcome.
-if not st.session_state.get('current_file_content_for_processing') and \
-   not (st.session_state.get('column_mapping_confirmed') and st.session_state.get('processed_data') is not None):
+# Show welcome/initial page if no file content is active AND (no mapping is confirmed OR no data is processed OR processed_data is empty)
+processed_data = st.session_state.get('processed_data')
+condition_for_main_layout = not st.session_state.get('current_file_content_for_processing') and \
+    not (
+        st.session_state.get('column_mapping_confirmed') and \
+        processed_data is not None and not processed_data.empty
+    )
+
+if condition_for_main_layout:
     main_page_layout()
-elif not st.session_state.get('processed_data') and st.session_state.get('current_file_content_for_processing'):
-    # This case means file is loaded, mapping might be pending or processing failed.
-    # The column mapper UI or error messages within the processing pipeline will be shown.
-    # If stuck here, it might mean column_mapper.render() is not st.stop()'ing or st.rerun()'ing correctly.
-    # For now, we can add a generic message if nothing else is shown by the pipeline itself.
+# Corrected condition for the elif block
+elif (st.session_state.get('processed_data') is None or st.session_state.get('processed_data').empty) and \
+     st.session_state.get('current_file_content_for_processing'):
+    # This case means file is loaded, but not yet successfully processed (or processing resulted in empty data).
+    # The column mapper UI or error messages within the processing pipeline should handle display.
+    # This block can provide a fallback message if those internal components don't display anything.
     if not st.session_state.get('csv_headers_for_mapping') and not st.session_state.get('column_mapping_confirmed'):
-         display_custom_message("Preparing data for mapping...", "info")
+         display_custom_message("Preparing data for column mapping. Please wait or check file.", "info")
 
 
 scroll_buttons_component = ScrollButtons()
 scroll_buttons_component.render()
-logger.info(f"App run cycle finished for user '{current_username}'. Active file: {st.session_state.get('uploaded_file_name')}, Processed: {st.session_state.get('processed_data') is not None}")
+logger.info(f"App run cycle finished for user '{current_username}'. Active file: {st.session_state.get('uploaded_file_name')}, Processed: {st.session_state.get('processed_data') is not None and not st.session_state.get('processed_data').empty}")
