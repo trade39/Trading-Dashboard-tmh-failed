@@ -2,6 +2,7 @@
 
 from typing import Dict, List, Tuple
 from collections import OrderedDict # Added for CONCEPTUAL_COLUMN_CATEGORIES
+import os # Added for environment variable access
 
 # --- Import KPI Definitions ---
 try:
@@ -14,6 +15,30 @@ except ImportError:
 APP_TITLE: str = "Trading Mastery Hub"
 RISK_FREE_RATE: float = 0.02 # Default Risk-Free Rate
 FORECAST_HORIZON: int = 30
+
+# --- Database Configuration ---
+# For SQLite, this will be the path to the database file.
+# Using os.getenv to allow for environment variable override, defaulting to a local file.
+# For Streamlit Cloud, this relative path will work within the deployed app's file system.
+DATABASE_TYPE: str = os.getenv("DATABASE_TYPE", "sqlite") # "sqlite" or "postgresql"
+SQLITE_DB_FILE: str = os.getenv("SQLITE_DB_FILE", "trading_dashboard.db")
+DATABASE_URL: str = ""
+
+if DATABASE_TYPE == "sqlite":
+    DATABASE_URL = f"sqlite:///{SQLITE_DB_FILE}"
+elif DATABASE_TYPE == "postgresql":
+    # Example for PostgreSQL - user would set these via .env
+    DB_USER = os.getenv("DB_USER", "user")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
+    DB_HOST = os.getenv("DB_HOST", "localhost")
+    DB_PORT = os.getenv("DB_PORT", "5432")
+    DB_NAME = os.getenv("DB_NAME", "trading_dashboard_pg")
+    DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+else:
+    # Fallback or error for unsupported database type
+    print(f"Warning (config.py): Unsupported DATABASE_TYPE '{DATABASE_TYPE}'. Defaulting to SQLite.")
+    DATABASE_URL = f"sqlite:///{SQLITE_DB_FILE}"
+
 
 # --- Benchmark Configuration ---
 DEFAULT_BENCHMARK_TICKER: str = "SPY"
@@ -34,11 +59,11 @@ CONCEPTUAL_COLUMNS: Dict[str, str] = {
     "pnl": "Profit or Loss (PnL)",
     "symbol": "Trading Symbol/Ticker",
     "strategy": "Strategy Name/Identifier",
-    "trade_id": "Unique Trade ID",
+    "trade_id": "Unique Trade ID", # Important for linking notes to trades
     "entry_price": "Entry Price",
     "exit_price": "Exit Price",
     "risk_pct": "Risk Percentage (%)",
-    "notes": "Trade Notes/Comments",
+    "notes": "Trade Notes/Comments", # This will be stored in a separate table
     "signal_confidence": "Signal Confidence Score",
     "duration_minutes": "Trade Duration (minutes)",
     "entry_time_str": "Entry Time (Raw String, if separate)",
@@ -46,7 +71,7 @@ CONCEPTUAL_COLUMNS: Dict[str, str] = {
     "trade_day_str": "Trade Day of Week (Raw String)",
     "trade_plan_str": "Trade Plan/Setup",
     "bias_str": "Market Bias",
-    "tag_str": "Custom Tags",
+    "tag_str": "Custom Tags", # Could be stored related to notes or trades
     "time_frame_str": "Trading Time Frame",
     "direction_str": "Trade Direction (Long/Short)",
     "trade_size_num": "Trade Size/Quantity",
@@ -54,7 +79,7 @@ CONCEPTUAL_COLUMNS: Dict[str, str] = {
     "session_str": "Trading Session",
     "market_conditions_str": "Market Conditions Description",
     "event_type_str": "Economic Event Type",
-    "events_details_str": "Economic Event Details", # Retained as the primary field for event details
+    "events_details_str": "Economic Event Details",
     "market_sentiment_str": "Market Sentiment",
     "psychological_factors_str": "Psychological Factors",
     "compliance_check_str": "Compliance Check Status",
@@ -78,7 +103,7 @@ CONCEPTUAL_COLUMNS: Dict[str, str] = {
     "take_profit_price": "Take Profit Price Level",
     "stop_loss_price": "Stop Loss Price Level",
     "trade_result_screenshot": "Trade Result Screenshot URL/Path",
-    "event_release_time": "Event Release Time", # Retained as the primary field for event time
+    "event_release_time": "Event Release Time",
     "htf_key_level_focus": "HTF Key Level Focus",
     "market_reaction_on_news": "Market Reaction on News Release",
     "planned_entry_price": "Planned Entry Price",
@@ -114,7 +139,7 @@ CONCEPTUAL_COLUMN_TYPES: Dict[str, str] = {
     "error_exit_type_related_str": "text", "profit_value_csv": "numeric",
     "loss_value_csv": "numeric", "duration_hrs_csv": "numeric", "peak_value_csv": "numeric",
     "take_profit_price": "numeric", "stop_loss_price": "numeric",
-    "trade_result_screenshot": "text", "event_release_time": "text", # Could be datetime if parsed
+    "trade_result_screenshot": "text", "event_release_time": "text",
     "htf_key_level_focus": "text", "market_reaction_on_news": "text",
     "planned_entry_price": "numeric", "planned_rrr": "numeric",
     "planned_sl_price": "numeric", "planned_tp_price": "numeric",
@@ -149,7 +174,7 @@ CONCEPTUAL_COLUMN_SYNONYMS: Dict[str, List[str]] = {
     "session_str": ["session", "market_session"],
     "market_conditions_str": ["market_conditions"],
     "event_type_str": ["event_type", "news_event_type"],
-    "events_details_str": ["events", "event_details", "news_details", "ref_events"], # Added "ref_events" as synonym here
+    "events_details_str": ["events", "event_details", "news_details", "ref_events"],
     "market_sentiment_str": ["market_sentiment", "sentiment"],
     "psychological_factors_str": ["psychological_factors", "emotions", "psychology"],
     "compliance_check_str": ["compliance_check", "plan_compliance"],
@@ -173,7 +198,7 @@ CONCEPTUAL_COLUMN_SYNONYMS: Dict[str, List[str]] = {
     "take_profit_price": ["take_profit", "tp_level", "target_price"],
     "stop_loss_price": ["stop_loss", "sl_level"],
     "trade_result_screenshot": ["trade_result_screenshot", "result_image"],
-    "event_release_time": ["event_release_time", "news_time", "ref_event_release_time"], # Added "ref_event_release_time" as synonym here
+    "event_release_time": ["event_release_time", "news_time", "ref_event_release_time"],
     "htf_key_level_focus": ["htf_key_level_focus", "higher_time_frame_level"],
     "market_reaction_on_news": ["market_reaction_on_news_release", "news_reaction"],
     "planned_entry_price": ["planned_entry"],
@@ -190,11 +215,9 @@ CONCEPTUAL_COLUMN_SYNONYMS: Dict[str, List[str]] = {
 }
 
 # Critical conceptual columns that MUST be mapped by the user.
-CRITICAL_CONCEPTUAL_COLUMNS: List[str] = ["date", "pnl"] # Keep this concise for essential operation
+CRITICAL_CONCEPTUAL_COLUMNS: List[str] = ["date", "pnl"]
 
 # --- NEW: Conceptual Column Categories for UI Grouping ---
-# Defines how columns are grouped in the ColumnMapperUI.
-# Uses OrderedDict to maintain the display order of categories.
 CONCEPTUAL_COLUMN_CATEGORIES: OrderedDict[str, List[str]] = OrderedDict([
     ("Core Trade Identifiers & Execution", [
         "date", "symbol", "trade_id", "strategy", "direction_str", "entry_price",
@@ -222,7 +245,7 @@ CONCEPTUAL_COLUMN_CATEGORIES: OrderedDict[str, List[str]] = OrderedDict([
         "trade_day_str"
     ]),
     ("External Factors & Economic Events", [
-        "event_type_str", "events_details_str", "event_release_time", # "ref_events" and "ref_event_release_time" removed from this list
+        "event_type_str", "events_details_str", "event_release_time",
         "market_reaction_on_news", "htf_key_level_focus"
     ]),
     ("Compliance & Visuals/Attachments", [
@@ -232,13 +255,21 @@ CONCEPTUAL_COLUMN_CATEGORIES: OrderedDict[str, List[str]] = OrderedDict([
 
 # --- UI and Plotting Colors ---
 COLORS: Dict[str, str] = {
-    "royal_blue": "#4169E1", "green": "#00FF00", "red": "#FF0000",
-    "gray": "#808080", "orange": "#FFA500", "purple": "#8A2BE2",
-    "dark_background": "#1C2526", "light_background": "#FFFFFF",
-    "text_dark": "#E0E0E0", "text_light": "#333333",
-    "text_muted_color": "#A0A0A0", "card_background_dark": "#273334",
-    "card_border_dark": "#4169E1", "card_background_light": "#F0F2F6",
-    "card_border_light": "#4169E1"
+    "royal_blue": "#1E88E5", # Aligned with config.toml primaryColor
+    "green": "#4CAF50",     # Updated success green
+    "red": "#F44336",       # Updated error red
+    "gray": "#808080",
+    "orange": "#FFA500",
+    "purple": "#8A2BE2",
+    "dark_background": "#0E1117", # Aligned with config.toml backgroundColor
+    "light_background": "#FFFFFF", # Standard light theme background
+    "text_dark": "#FAFAFA",        # Aligned with config.toml textColor
+    "text_light": "#212529",       # Standard dark text for light themes
+    "text_muted_color": "#A0A2B3", # Kept from original, good contrast on dark
+    "card_background_dark": "#1C1E25", # Adjusted from previous iteration
+    "card_border_dark": "#3E4049",     # Using existing border color
+    "card_background_light": "#F0F2F6",# Using secondary background for light cards
+    "card_border_light": "#DEE2E6"     # Using existing light border color
 }
 
 # --- KPI Groupings for Display ---
@@ -292,13 +323,40 @@ DISTRIBUTIONS_TO_FIT: List[str] = ['norm', 't', 'laplace', 'johnsonsu', 'genextr
 MARKOV_MAX_LAG: int = 1
 
 # --- Logging Configuration ---
-LOG_FILE: str = "logs/trading_dashboard_app.log"
-LOG_LEVEL: str = "INFO"
+LOG_FILE: str = "logs/trading_dashboard_app.log" # Ensure 'logs' directory exists or adjust path
+LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper() # Allow override via environment variable
 LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - [%(module)s:%(funcName)s:%(lineno)d] - %(message)s"
 
 # --- EXPECTED_COLUMNS: Internal names used after mapping ---
-# This is dynamically generated based on CONCEPTUAL_COLUMNS keys.
-# No need to manually list them here if the generation logic is sound.
 EXPECTED_COLUMNS: Dict[str, str] = {
     key: key for key in CONCEPTUAL_COLUMNS.keys()
 }
+
+# --- Load environment variables from .env file if it exists ---
+# This should be called early, but after essential constants are defined.
+# For Streamlit Cloud, environment variables are set in the platform's settings.
+from dotenv import load_dotenv
+load_dotenv() # Loads variables from .env into os.environ
+
+# Re-evaluate DATABASE_URL if environment variables were loaded
+# This ensures that if .env defines DB_USER etc., they are used.
+if DATABASE_TYPE == "postgresql":
+    DB_USER = os.getenv("DB_USER", "user")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
+    DB_HOST = os.getenv("DB_HOST", "localhost")
+    DB_PORT = os.getenv("DB_PORT", "5432")
+    DB_NAME = os.getenv("DB_NAME", "trading_dashboard_pg")
+    DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+elif DATABASE_TYPE == "sqlite": # Ensure SQLITE_DB_FILE can also be overridden
+    SQLITE_DB_FILE = os.getenv("SQLITE_DB_FILE", "trading_dashboard.db")
+    DATABASE_URL = f"sqlite:///{SQLITE_DB_FILE}"
+
+
+# You might want to add a check here to ensure DATABASE_URL is set
+if not DATABASE_URL:
+    print("CRITICAL WARNING (config.py): DATABASE_URL is not set. Database functionality will fail.")
+    # Fallback to a default SQLite if absolutely necessary and no other config is found
+    if not os.getenv("DATABASE_TYPE"): # If nothing was set at all
+        DATABASE_URL = "sqlite:///trading_dashboard_fallback.db"
+        print(f"Defaulting DATABASE_URL to: {DATABASE_URL}")
+
